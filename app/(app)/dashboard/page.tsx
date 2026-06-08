@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency, getDateRangeForPeriod, PERIOD_LABELS, type PeriodFilter } from '@/lib/utils'
-import type { Account, Transaction, Alert } from '@/types/database'
+import { formatCurrency, getDateRangeForPeriod, PERIOD_LABELS, getMonthStart, getMonthEnd, type PeriodFilter } from '@/lib/utils'
+import type { Account, Transaction, Alert, FinancialLimit, FinancialGoal } from '@/types/database'
 import BalanceChart from '@/components/dashboard/BalanceChart'
 import StatsCard from '@/components/dashboard/StatsCard'
 import AccountSummaryCard from '@/components/dashboard/AccountSummaryCard'
@@ -16,6 +16,8 @@ export default function DashboardPage() {
   const supabase = createClient()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [recentTx, setRecentTx] = useState<Transaction[]>([])
+  const [limits, setLimits] = useState<FinancialLimit[]>([])
+  const [goals, setGoals] = useState<FinancialGoal[]>([])
   const [monthIncome, setMonthIncome] = useState(0)
   const [monthExpenses, setMonthExpenses] = useState(0)
   const [alertRules, setAlertRules] = useState<Alert[]>([])
@@ -29,27 +31,64 @@ export default function DashboardPage() {
     const { start, end } = getDateRangeForPeriod(period)
 
     let txQuery = supabase.from('transactions')
-      .select('*, account:accounts(name,color,icon), category:categories(name,color)')
+      .select('*, account:accounts!account_id(name,color,icon), category:categories(name,color)')
       .order('created_at', { ascending: false })
 
     if (start && end) {
       txQuery = txQuery.gte('date', start).lte('date', end)
     }
 
-    const [{ data: accs }, { data: txAll }, { data: alerts }, { data: { user } }] = await Promise.all([
+    const [{ data: accs }, { data: txAll }, { data: alerts }, { data: lims }, { data: gls }, { data: { user } }] = await Promise.all([
       supabase.from('accounts').select('*').eq('is_active', true).order('name'),
       txQuery,
       supabase.from('alerts').select('*').eq('is_active', true),
+      supabase.from('financial_limits').select('*, account:accounts(name,color), category:categories(name,color,icon)'),
+      supabase.from('financial_goals').select('*, account:accounts(name,color)').eq('status', 'in_progress').order('created_at', { ascending: false }).limit(5),
       supabase.auth.getUser(),
     ])
 
     if (accs) setAccounts(accs)
+    
+    // Calculate dashboard statistics (transfers are neutral)
     if (txAll) {
       setRecentTx(txAll.slice(0, 8) as unknown as Transaction[])
       setMonthIncome(txAll.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0))
       setMonthExpenses(txAll.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0))
     }
+    
     if (alerts) setAlertRules(alerts)
+    if (gls) setGoals(gls as unknown as FinancialGoal[])
+
+    // Calculate Limits usage on the fly for real-time accuracy in the dashboard
+    if (lims) {
+      const startMonth = getMonthStart()
+      const endMonth = getMonthEnd()
+      
+      const { data: monthTxs } = await supabase
+        .from('transactions')
+        .select('account_id, category_id, amount')
+        .eq('type', 'expense')
+        .gte('date', startMonth)
+        .lte('date', endMonth)
+
+      const expList = monthTxs || []
+
+      lims.forEach(limit => {
+        let usage = 0
+        if (!limit.account_id && !limit.category_id) {
+          usage = expList.reduce((sum, tx) => sum + Number(tx.amount), 0)
+        } else if (limit.account_id && !limit.category_id) {
+          usage = expList.filter(tx => tx.account_id === limit.account_id).reduce((sum, tx) => sum + Number(tx.amount), 0)
+        } else if (!limit.account_id && limit.category_id) {
+          usage = expList.filter(tx => tx.category_id === limit.category_id).reduce((sum, tx) => sum + Number(tx.amount), 0)
+        } else if (limit.account_id && limit.category_id) {
+          usage = expList.filter(tx => tx.account_id === limit.account_id && tx.category_id === limit.category_id).reduce((sum, tx) => sum + Number(tx.amount), 0)
+        }
+        limit.current_usage = usage
+      })
+      setLimits(lims as unknown as FinancialLimit[])
+    }
+
     if (user?.email) setUserName(user.email.split('@')[0])
     setLoading(false)
   }, [supabase, period])
@@ -209,7 +248,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Chart + Accounts ── */}
-      <div className="grid-dashboard" style={{ marginBottom: '1rem' }}>
+      <div className="grid-dashboard" style={{ marginBottom: '1.25rem' }}>
         <BalanceChart />
 
         {/* Accounts panel */}
@@ -240,6 +279,120 @@ export default function DashboardPage() {
             </div>
           </Link>
         </div>
+      </div>
+
+      {/* ── Limites & Metas Dashboard Widgets ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+        
+        {/* Limits Widget Card */}
+        <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 4, height: 16, background: 'var(--accent-red)', borderRadius: 4 }} />
+              <span style={{ fontSize: '0.9375rem', fontWeight: 700 }}>Limites Críticos</span>
+            </div>
+            <Link href="/limits" style={{ fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+              Ajustar limites
+            </Link>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', flex: 1, justifyContent: limits.length === 0 ? 'center' : 'flex-start' }}>
+            {limits.length === 0 ? (
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '1rem 0' }}>
+                Nenhum limite mensal definido.
+              </p>
+            ) : (
+              limits
+                .map(l => {
+                  const spent = Number(l.current_usage)
+                  const limitVal = Number(l.monthly_limit)
+                  const pct = limitVal > 0 ? (spent / limitVal) * 100 : 0
+                  return { ...l, pct }
+                })
+                .sort((a, b) => b.pct - a.pct)
+                .slice(0, 3)
+                .map(limit => {
+                  const spent = Number(limit.current_usage)
+                  const limitVal = Number(limit.monthly_limit)
+                  const pct = Math.min(100, limit.pct)
+                  const over = spent > limitVal
+                  const warning = limit.pct >= limit.alert_threshold && !over
+                  const statusColor = over ? 'var(--accent-red)' : warning ? 'var(--accent-amber)' : 'var(--accent)'
+                  const barClass = over ? 'bg-danger' : warning ? 'bg-warning' : 'bg-safe'
+                  const title = limit.category?.name ? `Categoria: ${limit.category.name}` : limit.account?.name ? `Núcleo: ${limit.account.name}` : 'Limite Global'
+
+                  return (
+                    <div key={limit.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontWeight: 500 }}>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{title}</span>
+                        <span style={{ color: statusColor, fontWeight: 700 }}>{Math.round(limit.pct)}%</span>
+                      </div>
+                      <div className="progress-bar-track" style={{ height: 6 }}>
+                        <div className={`progress-bar-fill ${barClass}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
+                        <span>Gasto: {formatCurrency(spent)} / {formatCurrency(limitVal)}</span>
+                        <span>{over ? 'Ultrapassado!' : `Resta ${formatCurrency(limitVal - spent)}`}</span>
+                      </div>
+                    </div>
+                  )
+                })
+            )}
+          </div>
+        </div>
+
+        {/* Goals Widget Card */}
+        <div className="glass-card" style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ width: 4, height: 16, background: 'var(--accent-blue)', borderRadius: 4 }} />
+              <span style={{ fontSize: '0.9375rem', fontWeight: 700 }}>Metas em Andamento</span>
+            </div>
+            <Link href="/goals" style={{ fontSize: '0.75rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+              Ver metas
+            </Link>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', flex: 1, justifyContent: goals.length === 0 ? 'center' : 'flex-start' }}>
+            {goals.length === 0 ? (
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '1rem 0' }}>
+                Nenhuma meta ativa cadastrada.
+              </p>
+            ) : (
+              goals.slice(0, 3).map(goal => {
+                const target = Number(goal.target_amount)
+                const current = Number(goal.current_amount)
+                const pct = Math.min(100, target > 0 ? (current / target) * 100 : 0)
+
+                const today = new Date()
+                today.setHours(0,0,0,0)
+                const end = goal.end_date ? new Date(goal.end_date) : null
+                let dateLabel = 'Sem prazo'
+                if (end) {
+                  const daysRemaining = Math.max(0, Math.round((end.getTime() - today.getTime()) / (1000 * 3600 * 24)))
+                  dateLabel = daysRemaining > 0 ? `Faltam ${daysRemaining} dias` : 'Prazo encerrado'
+                }
+
+                return (
+                  <div key={goal.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontWeight: 500 }}>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{goal.title}</span>
+                      <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{Math.round(pct)}%</span>
+                    </div>
+                    <div className="progress-bar-track" style={{ height: 6 }}>
+                      <div className="progress-bar-fill bg-info" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
+                      <span>Guardado: {formatCurrency(current)} / {formatCurrency(target)}</span>
+                      <span>{dateLabel}</span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+
       </div>
 
       {/* ── Recent Transactions ── */}

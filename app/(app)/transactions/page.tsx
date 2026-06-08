@@ -15,7 +15,7 @@ export default function TransactionsPage() {
   const [quickAdd, setQuickAdd] = useState(false)
 
   // Filters
-  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all')
   const [filterAccount, setFilterAccount] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterDateFrom, setFilterDateFrom] = useState('')
@@ -23,7 +23,13 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
-    let q = supabase.from('transactions').select('*, account:accounts(name,color), category:categories(name,color)').order('date', { ascending: false }).limit(200)
+    let q = supabase
+      .from('transactions')
+      .select('*, account:accounts!account_id(name,color), category:categories(name,color)')
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(200)
+
     if (filterType !== 'all') q = q.eq('type', filterType)
     if (filterAccount) q = q.eq('account_id', filterAccount)
     if (filterCategory) q = q.eq('category_id', filterCategory)
@@ -31,9 +37,11 @@ export default function TransactionsPage() {
     if (filterDateTo) q = q.lte('date', filterDateTo)
 
     const [{ data: txs }, { data: accs }, { data: cats }] = await Promise.all([
-      q, supabase.from('accounts').select('*').eq('is_active', true).order('name'),
+      q,
+      supabase.from('accounts').select('*').eq('is_active', true).order('name'),
       supabase.from('categories').select('*').order('name'),
     ])
+
     if (txs) setTransactions(txs as unknown as Transaction[])
     if (accs) setAccounts(accs)
     if (cats) setCategories(cats)
@@ -46,18 +54,79 @@ export default function TransactionsPage() {
     ? transactions.filter(t => t.description?.toLowerCase().includes(search.toLowerCase()))
     : transactions
 
+  // Only calculate income and expenses (transfers are neutral)
   const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const totalExpenses = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
 
-  async function deleteTransaction(id: string, accountId: string, type: string, amount: number) {
+  async function deleteTransaction(tx: Transaction) {
     if (!confirm('Excluir esta movimentação permanentemente?')) return
-    await supabase.from('transactions').delete().eq('id', id)
-    const account = accounts.find(a => a.id === accountId)
-    if (account) {
-      const delta = type === 'income' ? -amount : amount
-      await supabase.from('accounts').update({ balance: Number(account.balance) + delta, updated_at: new Date().toISOString() }).eq('id', accountId)
+    setLoading(true)
+
+    try {
+      if (tx.type === 'transfer' && tx.transfer_group_id) {
+        // Fetch both transactions in the transfer group
+        const { data: groupTxs } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('transfer_group_id', tx.transfer_group_id)
+
+        if (groupTxs && groupTxs.length === 2) {
+          // Delete both transactions
+          await supabase.from('transactions').delete().eq('transfer_group_id', tx.transfer_group_id)
+
+          // Find source and destination legs
+          const sourceLeg = groupTxs.find(t => t.account_id === t.source_account_id)
+          const destLeg = groupTxs.find(t => t.account_id === t.destination_account_id)
+
+          if (sourceLeg && destLeg) {
+            const [{ data: sourceAcc }, { data: destAcc }] = await Promise.all([
+              supabase.from('accounts').select('*').eq('id', sourceLeg.source_account_id).single(),
+              supabase.from('accounts').select('*').eq('id', destLeg.destination_account_id).single(),
+            ])
+
+            // Restore balances: add back to source, subtract from destination
+            const updates = []
+            if (sourceAcc) {
+              updates.push(
+                supabase.from('accounts').update({
+                  balance: Number(sourceAcc.balance) + Number(sourceLeg.amount),
+                  updated_at: new Date().toISOString()
+                }).eq('id', sourceAcc.id)
+              )
+            }
+            if (destAcc) {
+              updates.push(
+                supabase.from('accounts').update({
+                  balance: Number(destAcc.balance) - Number(destLeg.amount),
+                  updated_at: new Date().toISOString()
+                }).eq('id', destAcc.id)
+              )
+            }
+            await Promise.all(updates)
+          }
+        } else {
+          // Fallback: delete only this transaction
+          await supabase.from('transactions').delete().eq('id', tx.id)
+        }
+      } else {
+        // Normal transaction delete
+        await supabase.from('transactions').delete().eq('id', tx.id)
+        const account = accounts.find(a => a.id === tx.account_id)
+        if (account) {
+          const delta = tx.type === 'income' ? -Number(tx.amount) : Number(tx.amount)
+          await supabase.from('accounts').update({
+            balance: Number(account.balance) + delta,
+            updated_at: new Date().toISOString()
+          }).eq('id', tx.account_id)
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting transaction:', err)
+      alert('Erro ao excluir movimentação.')
+    } finally {
+      setLoading(false)
+      load()
     }
-    load()
   }
 
   return (
@@ -81,10 +150,11 @@ export default function TransactionsPage() {
         </div>
         <div style={{ flex: '1 1 120px' }}>
           <label className="input-label" style={{ marginBottom: 4 }}>Tipo</label>
-          <select className="input" value={filterType} onChange={e => setFilterType(e.target.value as 'all'|'income'|'expense')}>
+          <select className="input" value={filterType} onChange={e => setFilterType(e.target.value as any)}>
             <option value="all">Todos</option>
             <option value="income">Entradas</option>
             <option value="expense">Saídas</option>
+            <option value="transfer">Transferências</option>
           </select>
         </div>
         <div style={{ flex: '1 1 140px' }}>
@@ -151,10 +221,42 @@ export default function TransactionsPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {filtered.map((tx, i) => {
-              const txAny = tx as unknown as Record<string, unknown>
-              const account = txAny.account as { name: string; color: string } | null
-              const category = txAny.category as { name: string; color: string } | null
-              const isIncome = tx.type === 'income'
+              const txAny = tx as any
+              const account = txAny.account
+              const category = txAny.category
+              
+              const isTransfer = tx.type === 'transfer'
+              const isTransferInflow = isTransfer && tx.account_id === tx.destination_account_id
+              const isTransferOutflow = isTransfer && tx.account_id === tx.source_account_id
+              const isIncome = tx.type === 'income' || isTransferInflow
+
+              // Muted gray for transfer outflow, green for inflow, red for expenses, emerald for income
+              const amountColor = isIncome 
+                ? 'var(--accent)' 
+                : isTransfer 
+                  ? 'var(--text-secondary)' 
+                  : 'var(--accent-red)'
+
+              const amountPrefix = isIncome ? '+' : '-'
+
+              const iconBg = isTransfer 
+                ? 'rgba(59, 130, 246, 0.1)' 
+                : isIncome 
+                  ? 'rgba(16, 185, 129, 0.1)' 
+                  : 'rgba(239, 68, 68, 0.1)'
+
+              const iconBorder = isTransfer 
+                ? 'rgba(59, 130, 246, 0.2)' 
+                : isIncome 
+                  ? 'rgba(16, 185, 129, 0.2)' 
+                  : 'rgba(239, 68, 68, 0.2)'
+
+              const iconColor = isTransfer 
+                ? 'var(--accent-blue)' 
+                : isIncome 
+                  ? 'var(--accent)' 
+                  : 'var(--accent-red)'
+
               return (
                 <div key={tx.id} style={{ 
                   display: 'flex', alignItems: 'center', gap: '1.25rem', 
@@ -167,18 +269,23 @@ export default function TransactionsPage() {
                 >
                   <div style={{ 
                     width: 44, height: 44, borderRadius: 12, flexShrink: 0, 
-                    background: isIncome ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', 
-                    border: `1px solid ${isIncome ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                    background: iconBg, 
+                    border: `1px solid ${iconBorder}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                    color: isIncome ? 'var(--accent)' : 'var(--accent-red)' 
+                    color: iconColor
                   }}>
-                    {isIncome ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
-                    : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>}
+                    {isTransfer ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3L21 7L17 11"/><path d="M21 7H9"/><path d="M7 21L3 17L7 13"/><path d="M3 17H15"/></svg>
+                    ) : isIncome ? (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>
+                    )}
                   </div>
                   
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {tx.description || category?.name || (isIncome ? 'Entrada' : 'Saída')}
+                      {tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}
                     </p>
                     <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'center', marginTop: 4 }}>
                       {account && (
@@ -196,19 +303,27 @@ export default function TransactionsPage() {
                           </span>
                         </>
                       )}
+                      {isTransfer && (
+                        <>
+                          <span style={{ color: 'var(--border)', fontSize: '0.75rem' }}>|</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', fontWeight: 500 }}>
+                            Movimentação interna
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 4 }}>
-                    <p style={{ fontWeight: 700, fontSize: '1.0625rem', color: isIncome ? 'var(--accent)' : 'var(--text-primary)' }}>
-                      {isIncome ? '+' : '-'}{formatCurrency(Number(tx.amount))}
+                    <p style={{ fontWeight: 700, fontSize: '1.0625rem', color: amountColor }}>
+                      {amountPrefix}{formatCurrency(Number(tx.amount))}
                     </p>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.8125rem', fontWeight: 500 }}>
                       {formatDateFull(tx.date)}
                     </p>
                   </div>
                   
-                  <button onClick={() => deleteTransaction(tx.id, tx.account_id, tx.type, Number(tx.amount))} className="btn btn-ghost btn-icon" title="Excluir" style={{ marginLeft: '0.5rem', opacity: 0.7 }}>
+                  <button onClick={() => deleteTransaction(tx)} className="btn btn-ghost btn-icon" title="Excluir" style={{ marginLeft: '0.5rem', opacity: 0.7 }} disabled={loading}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
                   </button>
                 </div>

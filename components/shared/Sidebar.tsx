@@ -34,6 +34,11 @@ const NAV_ITEMS = [
       <path d="M13.73 21a2 2 0 01-3.46 0"/>
     </svg>
   )},
+  { href: '/limits', label: 'Limites', icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  )},
   { href: '/goals', label: 'Metas', icon: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>

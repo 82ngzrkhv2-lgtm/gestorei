@@ -140,14 +140,22 @@ body {
   .nav-item.active svg { color: var(--accent); }
 
   /* === TYPE TOGGLE === */
-  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 3px; gap: 3px; }
-  .type-toggle-btn { padding: 0.625rem; border-radius: 6px; font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; background: transparent; color: var(--text-muted); }
+  .type-toggle { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 3px; gap: 3px; }
+  .type-toggle-btn { padding: 0.625rem; border-radius: 6px; font-size: 0.875rem; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s ease; background: transparent; color: var(--text-muted); text-align: center; }
   .type-toggle-btn.active-income { background: rgba(16, 185, 129, 0.15); color: var(--accent); box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2); }
   .type-toggle-btn.active-expense { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2); }
+  .type-toggle-btn.active-transfer { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2); }
 
   /* === PROGRESS BAR === */
-  .progress-bar-track { height: 6px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; }
+  .progress-bar-track { height: 6px; background: var(--bg-elevated); border-radius: 99px; overflow: hidden; position: relative; }
   .progress-bar-fill { height: 100%; border-radius: 99px; transition: width 0.5s ease; }
+  
+  /* Status styles for progress bars */
+  .bg-safe { background-color: var(--accent) !important; }
+  .bg-warning { background-color: var(--accent-amber) !important; }
+  .bg-danger { background-color: var(--accent-red) !important; }
+  .bg-info { background-color: var(--accent-blue) !important; }
+
 
   /* === SKELETON === */
   .skeleton { background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-hover) 50%, var(--bg-elevated) 75%); background-size: 200% 100%; animation: skeleton-pulse 1.5s infinite; border-radius: var(--radius-sm); }

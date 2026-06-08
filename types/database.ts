@@ -1,8 +1,10 @@
 export type AccountType = 'personal' | 'business' | 'ads' | 'investment' | 'card' | 'reserve' | 'agency' | 'other'
-export type TransactionType = 'income' | 'expense'
+export type TransactionType = 'income' | 'expense' | 'transfer'
 export type CategoryType = 'income' | 'expense' | 'both'
 export type AlertType = 'low_balance' | 'over_goal' | 'expense_spike' | 'net_negative'
 export type TransactionSource = 'manual' | 'whatsapp' | 'api'
+export type GoalType = 'patrimonio' | 'faturamento' | 'economia' | 'investimento' | 'reserva' | 'pessoal' | 'empresarial'
+export type GoalStatus = 'in_progress' | 'completed' | 'delayed'
 
 export interface Account {
   id: string
@@ -35,26 +37,49 @@ export interface Transaction {
   account_id: string
   category_id: string | null
   type: TransactionType
+  transaction_type: TransactionType
   amount: number
   description: string | null
   date: string
   source: TransactionSource
+  transfer_group_id?: string | null
+  source_account_id?: string | null
+  destination_account_id?: string | null
   created_at: string
   // joins
   account?: Account
   category?: Category
+  source_account?: Account
+  destination_account?: Account
 }
 
-export interface MonthlyGoal {
+export interface FinancialLimit {
   id: string
   user_id: string
   account_id: string | null
   category_id: string | null
-  month: string
-  target_amount: number
+  monthly_limit: number
+  current_usage: number
+  alert_threshold: number
   created_at: string
   account?: Account
   category?: Category
+}
+
+export interface FinancialGoal {
+  id: string
+  user_id: string
+  account_id: string | null
+  title: string
+  description: string | null
+  target_amount: number
+  current_amount: number
+  goal_type: GoalType
+  start_date: string
+  end_date: string | null
+  status: GoalStatus
+  created_at: string
+  account?: Account
 }
 
 export interface Alert {
@@ -83,3 +108,4 @@ export interface ActiveAlert {
   message: string
   severity: 'warning' | 'critical'
 }
+

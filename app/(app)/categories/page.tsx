@@ -121,10 +121,22 @@ export default function CategoriesPage() {
               </div>
               <div>
                 <label className="input-label">Cor</label>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                   {COLORS.map(c => (
-                    <button key={c} type="button" onClick={() => setColor(c)} style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: color === c ? '3px solid white' : '2px solid transparent', cursor: 'pointer' }} />
+                    <button key={c} type="button" onClick={() => setColor(c)} style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: color === c ? '3px solid white' : '2px solid transparent', cursor: 'pointer', transition: 'transform 0.1s' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'} />
                   ))}
+                  {/* Custom color input styled as a color picker button */}
+                  <div style={{ position: 'relative', width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', border: !COLORS.includes(color) ? '3px solid white' : '2px solid var(--glass-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(45deg, red, yellow, green, blue, purple, red)' }} title="Cor personalizada">
+                    <input 
+                      type="color" 
+                      value={color} 
+                      onChange={e => setColor(e.target.value)} 
+                      style={{ position: 'absolute', top: -4, left: -4, width: 40, height: 40, opacity: 0, cursor: 'pointer' }}
+                    />
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" style={{ pointerEvents: 'none', mixBlendMode: 'difference' }}>
+                      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                    </svg>
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.25rem' }}>

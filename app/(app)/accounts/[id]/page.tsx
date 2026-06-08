@@ -95,21 +95,51 @@ export default function AccountDetailPage() {
           </div>
         ) : (
           transactions.map((tx, i) => {
-            const txAny = tx as unknown as Record<string, unknown>
+            const txAny = tx as any
             const category = txAny.category as { name: string; color: string } | null
-            const isIncome = tx.type === 'income'
+            
+            const isTransfer = tx.type === 'transfer'
+            const isTransferInflow = isTransfer && tx.destination_account_id === id
+            const isTransferOutflow = isTransfer && tx.source_account_id === id
+            const isIncome = tx.type === 'income' || isTransferInflow
+
+            const iconBg = isTransfer 
+              ? 'rgba(59, 130, 246, 0.1)' 
+              : isIncome 
+                ? 'rgba(16, 185, 129, 0.1)' 
+                : 'rgba(239, 68, 68, 0.1)'
+
+            const iconColor = isTransfer 
+              ? 'var(--accent-blue)' 
+              : isIncome 
+                ? 'var(--accent)' 
+                : 'var(--accent-red)'
+
+            const amountColor = isIncome 
+              ? 'var(--accent)' 
+              : isTransfer 
+                ? 'var(--text-secondary)' 
+                : 'var(--accent-red)'
+
             return (
               <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', padding: '0.75rem 0', borderBottom: i < transactions.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: isIncome ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isIncome ? 'var(--accent)' : 'var(--accent-red)' }}>
-                  {isIncome ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
-                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>}
+                <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor }}>
+                  {isTransfer ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3L21 7L17 11"/><path d="M21 7H9"/><path d="M7 21L3 17L7 13"/><path d="M3 17H15"/></svg>
+                  ) : isIncome ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{tx.description || category?.name || (isIncome ? 'Entrada' : 'Saída')}</p>
-                  <p style={{ fontSize: '0.6875rem', color: category?.color ?? 'var(--text-muted)', marginTop: '0.125rem' }}>{category?.name ?? '—'}</p>
+                  <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}</p>
+                  <p style={{ fontSize: '0.6875rem', color: isTransfer ? 'var(--accent-blue)' : (category?.color ?? 'var(--text-muted)'), marginTop: '0.125rem' }}>
+                    {isTransfer ? 'Movimentação interna' : (category?.name ?? '—')}
+                  </p>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <p style={{ fontWeight: 700, color: isIncome ? 'var(--accent)' : 'var(--accent-red)', fontSize: '0.9375rem' }}>
+                  <p style={{ fontWeight: 700, color: amountColor, fontSize: '0.9375rem' }}>
                     {isIncome ? '+' : '-'}{formatCurrency(Number(tx.amount), account.currency)}
                   </p>
                   <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{formatDateFull(tx.date)}</p>

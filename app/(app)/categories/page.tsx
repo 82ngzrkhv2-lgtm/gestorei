@@ -33,7 +33,10 @@ export default function CategoriesPage() {
     if (editCat) {
       await supabase.from('categories').update({ name, type, color }).eq('id', editCat.id)
     } else {
-      await supabase.from('categories').insert({ name, type, color, icon: 'tag' })
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('categories').insert({ user_id: user.id, name, type, color, icon: 'tag' })
+      }
     }
     setSaving(false); setShowModal(false); load()
   }

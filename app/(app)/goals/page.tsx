@@ -50,12 +50,16 @@ export default function GoalsPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
-    await supabase.from('monthly_goals').upsert({
-      account_id: accountId || null,
-      category_id: categoryId || null,
-      month: thisMonth,
-      target_amount: parseFloat(targetAmount),
-    }, { onConflict: 'user_id,account_id,category_id,month' })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('monthly_goals').upsert({
+        user_id: user.id,
+        account_id: accountId || null,
+        category_id: categoryId || null,
+        month: thisMonth,
+        target_amount: parseFloat(targetAmount),
+      }, { onConflict: 'user_id,account_id,category_id,month' })
+    }
     setSaving(false); setShowModal(false); setAccountId(''); setCategoryId(''); setTargetAmount(''); load()
   }
 

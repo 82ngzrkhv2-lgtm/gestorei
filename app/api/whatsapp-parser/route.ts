@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
 
         if (matched) {
           await supabase.from('transactions').insert({
+            user_id: user.id,
             account_id: matched.id,
             type: parsed.type,
             amount: parsed.amount,

@@ -47,7 +47,11 @@ export default function QuickAddModal({ onClose, onSuccess, defaultAccountId }: 
 
     const numAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'))
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+
     await supabase.from('transactions').insert({
+      user_id: user.id,
       account_id: accountId,
       category_id: categoryId || null,
       type,

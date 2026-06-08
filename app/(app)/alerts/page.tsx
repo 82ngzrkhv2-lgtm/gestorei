@@ -38,11 +38,15 @@ export default function AlertsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
     const cfg = ALERT_TYPES.find(a => a.value === alertType)
-    await supabase.from('alerts').insert({
-      account_id: accountId || null,
-      type: alertType,
-      threshold: cfg?.needsThreshold ? parseFloat(threshold) : null,
-    })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('alerts').insert({
+        user_id: user.id,
+        account_id: accountId || null,
+        type: alertType,
+        threshold: cfg?.needsThreshold ? parseFloat(threshold) : null,
+      })
+    }
     setSaving(false); setShowModal(false); load()
   }
 

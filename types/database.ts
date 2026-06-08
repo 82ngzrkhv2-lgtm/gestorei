@@ -122,4 +122,21 @@ export interface UserPreferences {
   updated_at?: string
 }
 
+export interface UserSummarySettings {
+  id: string
+  user_id: string
+  whatsapp_number: string
+  daily_summary_enabled: boolean
+  weekly_summary_enabled: boolean
+  monthly_summary_enabled: boolean
+  /** Hour in 0-23 (BRT) when the daily summary is sent */
+  daily_send_hour: number
+  /** 0=Sun … 5=Fri … 6=Sat */
+  weekly_send_day: number
+  /** 1=first day of month, 0=last day of month */
+  monthly_send_day: number
+  created_at?: string
+  updated_at?: string
+}
+
 

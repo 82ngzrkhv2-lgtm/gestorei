@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency, getMonthStart, getMonthEnd } from '@/lib/utils'
+import { formatCurrency, getDateRangeForPeriod, PERIOD_LABELS, type PeriodFilter } from '@/lib/utils'
 import type { Account, Transaction, Alert } from '@/types/database'
 import BalanceChart from '@/components/dashboard/BalanceChart'
 import StatsCard from '@/components/dashboard/StatsCard'
@@ -23,17 +23,22 @@ export default function DashboardPage() {
   const [quickAdd, setQuickAdd] = useState(false)
   const [greeting, setGreeting] = useState('')
   const [userName, setUserName] = useState('')
-
-  const monthStart = getMonthStart()
-  const monthEnd = getMonthEnd()
+  const [period, setPeriod] = useState<PeriodFilter>('current_month')
 
   const loadData = useCallback(async () => {
+    const { start, end } = getDateRangeForPeriod(period)
+
+    let txQuery = supabase.from('transactions')
+      .select('*, account:accounts(name,color,icon), category:categories(name,color)')
+      .order('created_at', { ascending: false })
+
+    if (start && end) {
+      txQuery = txQuery.gte('date', start).lte('date', end)
+    }
+
     const [{ data: accs }, { data: txAll }, { data: alerts }, { data: { user } }] = await Promise.all([
       supabase.from('accounts').select('*').eq('is_active', true).order('name'),
-      supabase.from('transactions')
-        .select('*, account:accounts(name,color,icon), category:categories(name,color)')
-        .gte('date', monthStart).lte('date', monthEnd)
-        .order('created_at', { ascending: false }),
+      txQuery,
       supabase.from('alerts').select('*').eq('is_active', true),
       supabase.auth.getUser(),
     ])
@@ -47,7 +52,7 @@ export default function DashboardPage() {
     if (alerts) setAlertRules(alerts)
     if (user?.email) setUserName(user.email.split('@')[0])
     setLoading(false)
-  }, [supabase, monthStart, monthEnd])
+  }, [supabase, period])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -59,6 +64,7 @@ export default function DashboardPage() {
   const totalBalance = accounts.reduce((s, a) => s + Number(a.balance), 0)
   const netPL = monthIncome - monthExpenses
   const savingsRate = monthIncome > 0 ? Math.round((netPL / monthIncome) * 100) : 0
+  const periodLabel = getDateRangeForPeriod(period).label
 
   if (loading) return <DashboardSkeleton />
 
@@ -150,12 +156,27 @@ export default function DashboardPage() {
         <AlertsBanner accounts={accounts} monthExpenses={monthExpenses} monthIncome={monthIncome} alertRules={alertRules} />
       )}
 
-      {/* ── Stats Grid ── */}
+      {/* ── Period Selector & Stats ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Resumo <span style={{ color: 'var(--text-muted)' }}>{periodLabel}</span></h2>
+        
+        <select 
+          className="input" 
+          value={period} 
+          onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
+          style={{ width: 'auto', padding: '0.5rem 2.5rem 0.5rem 1rem', fontSize: '0.875rem' }}
+        >
+          {Object.entries(PERIOD_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid-stats" style={{ marginBottom: '1.25rem' }}>
         <StatsCard
           label="Entradas"
           value={formatCurrency(monthIncome)}
-          subtitle="Este mês"
+          subtitle={periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>}
           color="var(--accent)"
           className="animate-fade-in"
@@ -163,7 +184,7 @@ export default function DashboardPage() {
         <StatsCard
           label="Saídas"
           value={formatCurrency(monthExpenses)}
-          subtitle="Este mês"
+          subtitle={periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>}
           color="var(--accent-red)"
           className="animate-fade-in delay-1"

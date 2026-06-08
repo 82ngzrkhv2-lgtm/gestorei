@@ -21,7 +21,7 @@ export default function FloatingAddButton() {
         </svg>
       </button>
 
-      {open && <QuickAddModal onClose={() => setOpen(false)} />}
+      {open && <QuickAddModal onClose={() => setOpen(false)} onSuccess={() => { setOpen(false); window.location.reload(); }} />}
 
       <style>{`
         @media (max-width: 768px) {

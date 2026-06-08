@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   description: 'Cockpit financeiro inteligente para você ter clareza, separação e controle total do seu dinheiro pessoal e empresarial.',
   keywords: ['finanças', 'controle financeiro', 'gestão financeira', 'fintech', 'orçamento'],
   authors: [{ name: 'FinCockpit' }],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'FinCockpit',
+  },
+  manifest: '/manifest.json',
 }
 
 export const viewport: Viewport = {

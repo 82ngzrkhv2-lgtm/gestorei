@@ -63,7 +63,7 @@ export default function DashboardPage() {
 
     let goalsQuery = supabase.from('financial_goals').select('*, account:accounts(name,color)').eq('status', 'in_progress').order('created_at', { ascending: false }).limit(5)
     if (selectedView !== 'consolidated') {
-      goalsQuery = goalsQuery.eq('account_id', selectedView)
+      goalsQuery = goalsQuery.or(`account_id.eq.${selectedView},linked_account_id.eq.${selectedView}`)
     }
 
     const [{ data: accs }, { data: txAll }, { data: alerts }, { data: lims }, { data: gls }, { data: { user } }] = await Promise.all([
@@ -75,7 +75,8 @@ export default function DashboardPage() {
       supabase.auth.getUser(),
     ])
 
-    if (accs) setAccounts(accs)
+    const accountsList = accs || []
+    if (accs) setAccounts(accountsList)
     
     // Calculate dashboard statistics (transfers are neutral)
     if (txAll) {
@@ -85,7 +86,39 @@ export default function DashboardPage() {
     }
     
     if (alerts) setAlertRules(alerts)
-    if (gls) setGoals(gls as unknown as FinancialGoal[])
+
+    if (gls) {
+      const hasCategoryGoal = gls.some(g => g.tracking_type === 'automatic' && g.linked_category_id)
+      let catTxs: { category_id: string; amount: number; type: string }[] = []
+      if (hasCategoryGoal) {
+        const { data: txs } = await supabase
+          .from('transactions')
+          .select('category_id, amount, type')
+          .is('category_id', 'not.null')
+        catTxs = txs || []
+      }
+
+      const resolvedGoals = gls.map(goal => {
+        let current = Number(goal.current_amount)
+        if (goal.tracking_type === 'automatic') {
+          if (goal.linked_account_id) {
+            const acc = accountsList.find(a => a.id === goal.linked_account_id)
+            current = acc ? Number(acc.balance) : 0
+          } else if (goal.linked_category_id) {
+            const txsForCat = catTxs.filter(t => t.category_id === goal.linked_category_id)
+            const income = txsForCat.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+            const expense = txsForCat.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+            current = Math.max(0, income - expense)
+          }
+        }
+        return {
+          ...goal,
+          current_amount: current,
+          status: current >= Number(goal.target_amount) ? 'completed' : 'in_progress'
+        }
+      })
+      setGoals(resolvedGoals as unknown as FinancialGoal[])
+    }
 
     // Calculate Limits usage on the fly for real-time accuracy in the dashboard
     if (lims) {
@@ -646,7 +679,12 @@ export default function DashboardPage() {
                 return (
                   <div key={goal.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8125rem', fontWeight: 500 }}>
-                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{goal.title}</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {goal.title}
+                        {goal.tracking_type === 'automatic' && (
+                          <span style={{ fontSize: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--accent)', padding: '2px 4px', borderRadius: 4 }} title="Sincronizada automaticamente">Auto 🔄</span>
+                        )}
+                      </span>
                       <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{Math.round(pct)}%</span>
                     </div>
                     <div className="progress-bar-track" style={{ height: 6 }}>

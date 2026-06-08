@@ -80,6 +80,10 @@ export interface FinancialGoal {
   status: GoalStatus
   created_at: string
   account?: Account
+  tracking_type: 'manual' | 'automatic'
+  linked_account_id: string | null
+  linked_category_id: string | null
+  auto_calculation_enabled: boolean
 }
 
 export interface Alert {

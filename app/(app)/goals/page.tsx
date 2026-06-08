@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatCurrency, formatDateFull } from '@/lib/utils'
-import type { FinancialGoal, Account } from '@/types/database'
+import type { FinancialGoal, Account, Category } from '@/types/database'
 
 const GOAL_TYPES = [
   { value: 'reserva', label: 'Reserva de Emergência' },
@@ -19,6 +19,7 @@ export default function GoalsPage() {
   const supabase = createClient()
   const [goals, setGoals] = useState<FinancialGoal[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -34,13 +35,49 @@ export default function GoalsPage() {
   const [deadlinePreset, setDeadlinePreset] = useState('this_year')
   const [customEndDate, setCustomEndDate] = useState('')
 
+  // Automatic Goals Form State
+  const [trackingType, setTrackingType] = useState<'manual' | 'automatic'>('manual')
+  const [automaticSource, setAutomaticSource] = useState<'account' | 'category'>('account')
+  const [linkedAccountId, setLinkedAccountId] = useState('')
+  const [linkedCategoryId, setLinkedCategoryId] = useState('')
+
   const load = useCallback(async () => {
-    const [{ data: gs }, { data: accs }] = await Promise.all([
+    const [{ data: gs }, { data: accs }, { data: cats }, { data: txs }] = await Promise.all([
       supabase.from('financial_goals').select('*, account:accounts(name,color)').order('created_at', { ascending: false }),
       supabase.from('accounts').select('*').eq('is_active', true).order('name'),
+      supabase.from('categories').select('*').order('name'),
+      supabase.from('transactions').select('category_id, amount, type'),
     ])
-    if (gs) setGoals(gs as unknown as FinancialGoal[])
-    if (accs) setAccounts(accs)
+
+    const accountsList = accs || []
+    const categoriesList = cats || []
+    const transactionsList = txs || []
+
+    if (gs) {
+      const resolvedGoals = gs.map(goal => {
+        let current = Number(goal.current_amount)
+        if (goal.tracking_type === 'automatic') {
+          if (goal.linked_account_id) {
+            const acc = accountsList.find(a => a.id === goal.linked_account_id)
+            current = acc ? Number(acc.balance) : 0
+          } else if (goal.linked_category_id) {
+            const catTxs = transactionsList.filter(t => t.category_id === goal.linked_category_id)
+            const income = catTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+            const expense = catTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
+            current = Math.max(0, income - expense)
+          }
+        }
+        return {
+          ...goal,
+          current_amount: current,
+          status: current >= Number(goal.target_amount) ? 'completed' : 'in_progress'
+        }
+      })
+      setGoals(resolvedGoals as unknown as FinancialGoal[])
+    }
+
+    if (accs) setAccounts(accountsList)
+    if (cats) setCategories(categoriesList)
     setLoading(false)
   }, [supabase])
 
@@ -52,7 +89,7 @@ export default function GoalsPage() {
     setFormError('')
 
     const targetVal = parseFloat(targetAmount)
-    const currentVal = parseFloat(currentAmount || '0')
+    const currentVal = trackingType === 'automatic' ? 0 : parseFloat(currentAmount || '0')
 
     if (isNaN(targetVal) || targetVal <= 0) {
       setFormError('O valor alvo deve ser maior que zero.')
@@ -60,10 +97,23 @@ export default function GoalsPage() {
       return
     }
 
-    if (isNaN(currentVal) || currentVal < 0) {
+    if (trackingType === 'manual' && (isNaN(currentVal) || currentVal < 0)) {
       setFormError('O valor guardado não pode ser negativo.')
       setSaving(false)
       return
+    }
+
+    if (trackingType === 'automatic') {
+      if (automaticSource === 'account' && !linkedAccountId) {
+        setFormError('Selecione um núcleo para o rastreamento automático.')
+        setSaving(false)
+        return
+      }
+      if (automaticSource === 'category' && !linkedCategoryId) {
+        setFormError('Selecione uma categoria para o rastreamento automático.')
+        setSaving(false)
+        return
+      }
     }
 
     // Determine end date
@@ -106,7 +156,11 @@ export default function GoalsPage() {
       goal_type: goalType,
       account_id: accountId || null,
       end_date: endDateStr,
-      status: currentVal >= targetVal ? 'completed' : 'in_progress'
+      status: currentVal >= targetVal ? 'completed' : 'in_progress',
+      tracking_type: trackingType,
+      linked_account_id: trackingType === 'automatic' && automaticSource === 'account' ? linkedAccountId : null,
+      linked_category_id: trackingType === 'automatic' && automaticSource === 'category' ? linkedCategoryId : null,
+      auto_calculation_enabled: trackingType === 'automatic'
     })
 
     if (insertError) {
@@ -126,6 +180,10 @@ export default function GoalsPage() {
     setAccountId('')
     setDeadlinePreset('this_year')
     setCustomEndDate('')
+    setTrackingType('manual')
+    setAutomaticSource('account')
+    setLinkedAccountId('')
+    setLinkedCategoryId('')
     load()
   }
 
@@ -256,22 +314,50 @@ export default function GoalsPage() {
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                   <div>
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {typeLabel}
-                    </span>
-                    <h3 style={{ fontWeight: 700, fontSize: '1.125rem', marginTop: 2, color: 'var(--text-primary)' }}>{goal.title}</h3>
-                    {account && (
-                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: account.color }} />
-                        {account.name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {typeLabel}
+                      </span>
+                      <span style={{ 
+                        fontSize: '0.625rem', 
+                        fontWeight: 700, 
+                        color: goal.tracking_type === 'automatic' ? 'var(--accent)' : 'var(--text-secondary)', 
+                        textTransform: 'uppercase', 
+                        background: goal.tracking_type === 'automatic' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-elevated)',
+                        padding: '2px 6px',
+                        borderRadius: 4
+                      }}>
+                        {goal.tracking_type === 'automatic' ? 'Auto 🔄' : 'Manual ✍️'}
+                      </span>
+                    </div>
+                    <h3 style={{ fontWeight: 700, fontSize: '1.125rem', marginTop: 4, color: 'var(--text-primary)' }}>{goal.title}</h3>
+                    
+                    {goal.tracking_type === 'automatic' ? (
+                      <p style={{ fontSize: '0.75rem', color: 'var(--accent)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <span>🔄 Sincronizado:</span>
+                        <span style={{ textDecoration: 'underline' }}>
+                          {goal.linked_account_id 
+                            ? `Núcleo "${accounts.find(a => a.id === goal.linked_account_id)?.name || 'Desconhecido'}"`
+                            : `Categoria "${categories.find(c => c.id === goal.linked_category_id)?.name || 'Desconhecida'}"`
+                          }
+                        </span>
                       </p>
+                    ) : (
+                      account && (
+                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: account.color }} />
+                          {account.name}
+                        </p>
+                      )
                     )}
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    <button onClick={() => updateProgress(goal.id, current, target)} className="btn btn-ghost btn-icon btn-sm" title="Atualizar valor guardado">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                    </button>
+                    {goal.tracking_type !== 'automatic' && (
+                      <button onClick={() => updateProgress(goal.id, current, target)} className="btn btn-ghost btn-icon btn-sm" title="Atualizar valor guardado">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                      </button>
+                    )}
                     <button onClick={() => deleteGoal(goal.id)} className="btn btn-ghost btn-icon btn-sm" style={{ opacity: 0.5 }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
                     </button>
@@ -364,7 +450,117 @@ export default function GoalsPage() {
                 <input id="goal-desc" className="input" placeholder="Ex: Caixa de 6 meses para custos pessoais" value={description} onChange={e => setDescription(e.target.value)} />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              {/* Tipo de Acompanhamento Selector */}
+              <div>
+                <label className="input-label">Tipo de Acompanhamento</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <button
+                    type="button"
+                    className={`btn ${trackingType === 'manual' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setTrackingType('manual')}
+                    style={{
+                      justifyContent: 'center',
+                      background: trackingType === 'manual' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
+                      border: trackingType === 'manual' ? 'none' : '1px solid var(--border)',
+                      color: trackingType === 'manual' ? '#fff' : 'var(--text-primary)',
+                      gap: '0.375rem'
+                    }}
+                  >
+                    ✍️ Manual
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${trackingType === 'automatic' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setTrackingType('automatic')}
+                    style={{
+                      justifyContent: 'center',
+                      background: trackingType === 'automatic' ? 'var(--accent)' : 'var(--bg-elevated)',
+                      border: trackingType === 'automatic' ? 'none' : '1px solid var(--border)',
+                      color: trackingType === 'automatic' ? '#fff' : 'var(--text-primary)',
+                      gap: '0.375rem'
+                    }}
+                  >
+                    🔄 Automático
+                  </button>
+                </div>
+              </div>
+
+              {/* Automatic Configuration Fields */}
+              {trackingType === 'automatic' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--bg-hover)', padding: '1rem', borderRadius: 8, border: '1px dashed var(--border)' }}>
+                  <div>
+                    <label className="input-label">Fonte de Sincronização</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <button
+                        type="button"
+                        className={`btn ${automaticSource === 'account' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setAutomaticSource('account')}
+                        style={{
+                          justifyContent: 'center',
+                          fontSize: '0.8125rem',
+                          background: automaticSource === 'account' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
+                          border: automaticSource === 'account' ? 'none' : '1px solid var(--border)',
+                          color: automaticSource === 'account' ? '#fff' : 'var(--text-primary)'
+                        }}
+                      >
+                        💳 Saldo do Núcleo
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${automaticSource === 'category' ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setAutomaticSource('category')}
+                        style={{
+                          justifyContent: 'center',
+                          fontSize: '0.8125rem',
+                          background: automaticSource === 'category' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
+                          border: automaticSource === 'category' ? 'none' : '1px solid var(--border)',
+                          color: automaticSource === 'category' ? '#fff' : 'var(--text-primary)'
+                        }}
+                      >
+                        🏷️ Acumulado Categoria
+                      </button>
+                    </div>
+                  </div>
+
+                  {automaticSource === 'account' ? (
+                    <div>
+                      <label className="input-label" htmlFor="linked-account-select">Selecionar Núcleo para Sincronizar</label>
+                      <select
+                        id="linked-account-select"
+                        className="input"
+                        value={linkedAccountId}
+                        onChange={e => setLinkedAccountId(e.target.value)}
+                        required={trackingType === 'automatic' && automaticSource === 'account'}
+                      >
+                        <option value="">Selecione um núcleo...</option>
+                        {accounts.map(a => <option key={a.id} value={a.id}>{a.name} (Saldo: {formatCurrency(a.balance)})</option>)}
+                      </select>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        O progresso desta meta acompanhará o saldo atual real deste núcleo em tempo real.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="input-label" htmlFor="linked-category-select">Selecionar Categoria para Sincronizar</label>
+                      <select
+                        id="linked-category-select"
+                        className="input"
+                        value={linkedCategoryId}
+                        onChange={e => setLinkedCategoryId(e.target.value)}
+                        required={trackingType === 'automatic' && automaticSource === 'category'}
+                      >
+                        <option value="">Selecione uma categoria...</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+                        O valor guardado será calculado como a soma das entradas menos as saídas nesta categoria.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: trackingType === 'manual' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
                 <div>
                   <label className="input-label" htmlFor="goal-target">Valor Alvo (R$)</label>
                   <div style={{ position: 'relative' }}>
@@ -372,16 +568,18 @@ export default function GoalsPage() {
                     <input id="goal-target" className="input" type="number" step="0.01" min="0.01" placeholder="50000.00" value={targetAmount} onChange={e => setTargetAmount(e.target.value)} required style={{ paddingLeft: '2.5rem', fontSize: '1.0625rem', fontWeight: 600 }} />
                   </div>
                 </div>
-                <div>
-                  <label className="input-label" htmlFor="goal-current">Já Guardado (R$)</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>R$</span>
-                    <input id="goal-current" className="input" type="number" step="0.01" min="0" placeholder="0.00" value={currentAmount} onChange={e => setCurrentAmount(e.target.value)} style={{ paddingLeft: '2.5rem', fontSize: '1.0625rem', fontWeight: 600 }} />
+                {trackingType === 'manual' && (
+                  <div>
+                    <label className="input-label" htmlFor="goal-current">Já Guardado (R$)</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>R$</span>
+                      <input id="goal-current" className="input" type="number" step="0.01" min="0" placeholder="0.00" value={currentAmount} onChange={e => setCurrentAmount(e.target.value)} style={{ paddingLeft: '2.5rem', fontSize: '1.0625rem', fontWeight: 600 }} />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: trackingType === 'manual' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
                 <div>
                   <label className="input-label" htmlFor="goal-type-select">Tipo de Meta</label>
                   <select id="goal-type-select" className="input" value={goalType} onChange={e => setGoalType(e.target.value)}>
@@ -389,13 +587,15 @@ export default function GoalsPage() {
                   </select>
                 </div>
                 
-                <div>
-                  <label className="input-label" htmlFor="goal-account-select">Núcleo Relacionado</label>
-                  <select id="goal-account-select" className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
-                    <option value="">Nenhum</option>
-                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
+                {trackingType === 'manual' && (
+                  <div>
+                    <label className="input-label" htmlFor="goal-account-select">Núcleo Relacionado (opcional)</label>
+                    <select id="goal-account-select" className="input" value={accountId} onChange={e => setAccountId(e.target.value)}>
+                      <option value="">Nenhum</option>
+                      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div>

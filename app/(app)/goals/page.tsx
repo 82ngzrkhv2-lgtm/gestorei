@@ -42,19 +42,31 @@ export default function GoalsPage() {
   const [linkedCategoryId, setLinkedCategoryId] = useState('')
 
   const load = useCallback(async () => {
-    const [{ data: gs }, { data: accs }, { data: cats }, { data: txs }] = await Promise.all([
+    const [{ data: gs }, { data: accs }, { data: cats }] = await Promise.all([
       supabase.from('financial_goals').select('*, account:accounts!account_id(name,color)').order('created_at', { ascending: false }),
       supabase.from('accounts').select('*').eq('is_active', true).order('name'),
       supabase.from('categories').select('*').order('name'),
-      supabase.from('transactions').select('category_id, amount, type'),
     ])
 
     const accountsList = accs || []
     const categoriesList = cats || []
-    const transactionsList = txs || []
+    const goalsList = gs || []
+
+    const linkedCatIds = goalsList
+      .filter(g => g.tracking_type === 'automatic' && g.linked_category_id)
+      .map(g => g.linked_category_id) as string[]
+
+    let transactionsList: { category_id: string | null; amount: number; type: string }[] = []
+    if (linkedCatIds.length > 0) {
+      const { data: txs } = await supabase
+        .from('transactions')
+        .select('category_id, amount, type')
+        .in('category_id', linkedCatIds)
+      transactionsList = txs || []
+    }
 
     if (gs) {
-      const resolvedGoals = gs.map(goal => {
+      const resolvedGoals = goalsList.map(goal => {
         let current = Number(goal.current_amount)
         if (goal.tracking_type === 'automatic') {
           if (goal.linked_account_id) {

@@ -88,13 +88,16 @@ export default function DashboardPage() {
     if (alerts) setAlertRules(alerts)
 
     if (gls) {
-      const hasCategoryGoal = gls.some(g => g.tracking_type === 'automatic' && g.linked_category_id)
+      const linkedCatIds = gls
+        .filter(g => g.tracking_type === 'automatic' && g.linked_category_id)
+        .map(g => g.linked_category_id) as string[]
+
       let catTxs: { category_id: string; amount: number; type: string }[] = []
-      if (hasCategoryGoal) {
+      if (linkedCatIds.length > 0) {
         const { data: txs } = await supabase
           .from('transactions')
           .select('category_id, amount, type')
-          .is('category_id', 'not.null')
+          .in('category_id', linkedCatIds)
         catTxs = txs || []
       }
 

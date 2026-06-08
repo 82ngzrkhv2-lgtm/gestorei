@@ -18,32 +18,49 @@ export default function BalanceChart({ accountId }: { accountId?: string | null 
 
   useEffect(() => {
     async function load() {
-      const months: MonthData[] = []
       const now = new Date()
+      // First day of the month 5 months ago
+      const startPeriod = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+      const startStr = `${startPeriod.getFullYear()}-${String(startPeriod.getMonth() + 1).padStart(2, '0')}-01`
+      
+      // Last day of the current month
+      const endPeriod = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      const endStr = `${endPeriod.getFullYear()}-${String(endPeriod.getMonth() + 1).padStart(2, '0')}-${String(endPeriod.getDate()).padStart(2, '0')}`
 
+      let query = supabase
+        .from('transactions')
+        .select('type, amount, date')
+        .gte('date', startStr)
+        .lte('date', endStr)
+
+      if (accountId) {
+        query = query.eq('account_id', accountId)
+      }
+
+      const { data: txs } = await query
+      const transactionList = txs || []
+
+      const months: MonthData[] = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-        const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
         const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+        const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1)
+        
+        const monthNum = d.getMonth()
+        const yearNum = d.getFullYear()
+        
+        // Group and sum in memory (timezone-safe parsing)
+        const monthTxs = transactionList.filter(t => {
+          const parts = t.date.split('-')
+          const txYear = parseInt(parts[0], 10)
+          const txMonth = parseInt(parts[1], 10) - 1
+          return txMonth === monthNum && txYear === yearNum
+        })
 
-        let query = supabase
-          .from('transactions')
-          .select('type, amount')
-          .gte('date', start)
-          .lte('date', endStr)
+        const income = monthTxs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
+        const expenses = monthTxs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
 
-        if (accountId) {
-          query = query.eq('account_id', accountId)
-        }
-
-        const { data: txs } = await query
-
-        const income = (txs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
-        const expenses = (txs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
-
-        months.push({ month: label.charAt(0).toUpperCase() + label.slice(1), income, expenses })
+        months.push({ month: formattedLabel, income, expenses })
       }
 
       setData(months)

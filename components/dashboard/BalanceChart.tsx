@@ -11,7 +11,7 @@ interface MonthData {
   expenses: number
 }
 
-export default function BalanceChart() {
+export default function BalanceChart({ accountId }: { accountId?: string | null }) {
   const supabase = createClient()
   const [data, setData] = useState<MonthData[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,11 +28,17 @@ export default function BalanceChart() {
         const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
         const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
 
-        const { data: txs } = await supabase
+        let query = supabase
           .from('transactions')
           .select('type, amount')
           .gte('date', start)
           .lte('date', endStr)
+
+        if (accountId) {
+          query = query.eq('account_id', accountId)
+        }
+
+        const { data: txs } = await query
 
         const income = (txs ?? []).filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
         const expenses = (txs ?? []).filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0)
@@ -44,7 +50,7 @@ export default function BalanceChart() {
       setLoading(false)
     }
     load()
-  }, [supabase])
+  }, [supabase, accountId])
 
   if (loading) return <div className="skeleton" style={{ height: 260, borderRadius: 'var(--radius)' }} />
 

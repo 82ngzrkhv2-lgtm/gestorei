@@ -109,3 +109,13 @@ export interface ActiveAlert {
   severity: 'warning' | 'critical'
 }
 
+export interface UserPreferences {
+  user_id: string
+  default_dashboard_view: string
+  remember_last_view: boolean
+  last_dashboard_view: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+

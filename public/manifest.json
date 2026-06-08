@@ -3,14 +3,21 @@
   "short_name": "FinCockpit",
   "description": "Cockpit financeiro inteligente para você ter clareza, separação e controle total do seu dinheiro pessoal e empresarial.",
   "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#080d17",
-  "theme_color": "#10b981",
+  "theme_color": "#080d17",
+  "id": "fincockpit-pwa",
   "icons": [
     {
       "src": "/favicon.ico",
       "sizes": "any",
-      "type": "image/x-icon"
+      "type": "image/x-icon",
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "categories": ["finance", "productivity"],
+  "lang": "pt-BR",
+  "dir": "ltr"
 }

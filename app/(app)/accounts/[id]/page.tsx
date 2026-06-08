@@ -65,20 +65,40 @@ export default function AccountDetailPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="account-stats-grid" style={{ marginBottom: '1.25rem' }}>
         <div className="stat-card">
           <span className="stat-label">Saldo Atual</span>
-          <span className="stat-value" style={{ color: Number(account.balance) >= 0 ? 'var(--accent)' : 'var(--accent-red)', marginTop: 8, display: 'block' }}>
+          <span
+            className="stat-value money-value"
+            style={{
+              color: Number(account.balance) >= 0 ? 'var(--accent)' : 'var(--accent-red)',
+              marginTop: 8,
+              display: 'block',
+            }}
+            title={formatCurrency(Number(account.balance), account.currency)}
+          >
             {formatCurrency(Number(account.balance), account.currency)}
           </span>
         </div>
         <div className="stat-card">
           <span className="stat-label">Entradas do Mês</span>
-          <span className="stat-value" style={{ color: 'var(--accent)', marginTop: 8, display: 'block' }}>{formatCurrency(monthIncome)}</span>
+          <span
+            className="stat-value money-value"
+            style={{ color: 'var(--accent)', marginTop: 8, display: 'block' }}
+            title={formatCurrency(monthIncome)}
+          >
+            {formatCurrency(monthIncome)}
+          </span>
         </div>
         <div className="stat-card">
           <span className="stat-label">Saídas do Mês</span>
-          <span className="stat-value" style={{ color: 'var(--accent-red)', marginTop: 8, display: 'block' }}>{formatCurrency(monthExpenses)}</span>
+          <span
+            className="stat-value money-value"
+            style={{ color: 'var(--accent-red)', marginTop: 8, display: 'block' }}
+            title={formatCurrency(monthExpenses)}
+          >
+            {formatCurrency(monthExpenses)}
+          </span>
         </div>
       </div>
 
@@ -86,7 +106,7 @@ export default function AccountDetailPage() {
       <div className="glass-card" style={{ padding: '1.25rem 1.5rem' }}>
         <div className="section-header">
           <span className="section-title">Histórico</span>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{transactions.length} movimentações</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{transactions.length} movimentações</span>
         </div>
         {transactions.length === 0 ? (
           <div className="empty-state">
@@ -122,7 +142,7 @@ export default function AccountDetailPage() {
                 : 'var(--accent-red)'
 
             return (
-              <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', padding: '0.75rem 0', borderBottom: i < transactions.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
+              <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', padding: '0.875rem 0', borderBottom: i < transactions.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
                 <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor }}>
                   {isTransfer ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3L21 7L17 11"/><path d="M21 7H9"/><path d="M7 21L3 17L7 13"/><path d="M3 17H15"/></svg>
@@ -133,16 +153,16 @@ export default function AccountDetailPage() {
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}</p>
-                  <p style={{ fontSize: '0.6875rem', color: isTransfer ? 'var(--accent-blue)' : (category?.color ?? 'var(--text-muted)'), marginTop: '0.125rem' }}>
+                  <p style={{ fontWeight: 600, fontSize: '0.9375rem', color: 'var(--text-primary)' }}>{tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}</p>
+                  <p style={{ fontSize: '0.75rem', color: isTransfer ? 'var(--accent-blue)' : (category?.color ?? 'var(--text-secondary)'), marginTop: '0.125rem', fontWeight: 500 }}>
                     {isTransfer ? 'Movimentação interna' : (category?.name ?? '—')}
                   </p>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <p style={{ fontWeight: 700, color: amountColor, fontSize: '0.9375rem' }}>
+                <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <p style={{ fontWeight: 700, color: amountColor, fontSize: '1rem' }}>
                     {isIncome ? '+' : '-'}{formatCurrency(Number(tx.amount), account.currency)}
                   </p>
-                  <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{formatDateFull(tx.date)}</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>{formatDateFull(tx.date)}</p>
                 </div>
               </div>
             )

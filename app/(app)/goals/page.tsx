@@ -260,8 +260,12 @@ export default function GoalsPage() {
 
             const target = Number(goal.target_amount)
             const current = Number(goal.current_amount)
+            const isNegative = current < 0
             const remaining = Math.max(0, target - current)
-            const pct = target > 0 ? Math.min((current / target) * 100, 100) : 0
+            
+            // Mathematically clamp visual progress, but keep real percentage for display
+            // If negative, show 0% progress as requested ("progresso = 0%")
+            const pct = target > 0 ? Math.max(0, Math.min((current / target) * 100, 100)) : 0
 
             // Days calculation
             const today = new Date()
@@ -283,55 +287,62 @@ export default function GoalsPage() {
 
             const monthlySavingNeeded = remaining > 0 ? (remaining / monthsRemaining) : 0
 
-            // Mathematical Insights
+            // Realistic financial logic calculations
+            const monthsElapsed = Math.max(1, Math.round(daysElapsed / 30.44))
+            const actualMonthlyContribution = current > 0 ? (current / monthsElapsed) : 0
+
             let insight = ''
             let insightColor = 'var(--text-secondary)'
             let insightBg = 'var(--bg-elevated)'
 
-            if (current >= target) {
-              insight = '🚀 Meta concluída! Parabéns pela conquista!'
+            if (current < 0) {
+              insight = '🚨 O progresso atual compromete esta meta. Núcleo com saldo negativo.'
+              insightColor = 'var(--accent-red)'
+              insightBg = 'rgba(239, 68, 68, 0.08)'
+            } else if (current === 0) {
+              insight = '⚠️ Nenhum progresso registrado até o momento.'
+              insightColor = 'var(--text-secondary)'
+              insightBg = 'var(--bg-elevated)'
+            } else if (current >= target) {
+              insight = '🌟 Meta concluída! Objetivo financeiro atingido.'
               insightColor = 'var(--accent)'
               insightBg = 'rgba(16, 185, 129, 0.08)'
             } else if (end && today > end) {
-              insight = '⚠️ O prazo desta meta expirou.'
+              insight = '🚨 O prazo definido para esta meta expirou.'
               insightColor = 'var(--accent-red)'
               insightBg = 'rgba(239, 68, 68, 0.08)'
             } else if (end) {
-              const timeProgress = Math.min(1, daysElapsed / totalDays)
-              const financialProgress = current / target
-
-              if (financialProgress >= timeProgress + 0.05) {
-                insight = '🚀 Você alcançará sua meta antes do prazo.'
+              // Compare real average monthly contribution against required monthly rate
+              if (actualMonthlyContribution >= monthlySavingNeeded) {
+                insight = '✅ Meta evoluindo conforme esperado. Ritmo adequado.'
                 insightColor = 'var(--accent)'
                 insightBg = 'rgba(16, 185, 129, 0.08)'
-              } else if (financialProgress >= timeProgress - 0.05) {
-                insight = '✅ Você está acima da média necessária.'
-                insightColor = 'var(--accent-blue)'
-                insightBg = 'rgba(59, 130, 246, 0.08)'
               } else {
-                insight = '⚠️ Nesse ritmo, sua meta atrasará.'
+                insight = '⚠️ Ritmo abaixo do ideal. Aportes recentes não sustentam o prazo.'
                 insightColor = 'var(--accent-amber)'
                 insightBg = 'rgba(245, 158, 11, 0.08)'
               }
             } else {
               insight = '📈 Acompanhando seu ritmo de economia.'
+              insightColor = 'var(--accent-blue)'
+              insightBg = 'rgba(59, 130, 246, 0.08)'
             }
 
             const typeLabel = GOAL_TYPES.find(t => t.value === goal.goal_type)?.label || 'Meta'
 
             return (
               <div key={goal.id} className={`glass-card animate-fade-in delay-${Math.min(i+1, 4)}`} style={{ padding: '1.5rem', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {/* Visual indicator (emerald glow border) */}
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: current >= target ? 'var(--accent)' : 'var(--accent-blue)' }} />
+                {/* Visual indicator (emerald/red/blue glow border) */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: isNegative ? 'var(--accent-red)' : current >= target ? 'var(--accent)' : 'var(--accent-blue)' }} />
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         {typeLabel}
                       </span>
                       <span style={{ 
-                        fontSize: '0.625rem', 
+                        fontSize: '0.6875rem', 
                         fontWeight: 700, 
                         color: goal.tracking_type === 'automatic' ? 'var(--accent)' : 'var(--text-secondary)', 
                         textTransform: 'uppercase', 
@@ -392,14 +403,32 @@ export default function GoalsPage() {
                       {' '} / {formatCurrency(target)}
                     </span>
                   </div>
-                  <span style={{ fontSize: '1rem', fontWeight: 800, color: current >= target ? 'var(--accent)' : 'var(--accent-blue)' }}>
+                  <span style={{ 
+                    fontSize: '1rem', 
+                    fontWeight: 800, 
+                    color: isNegative 
+                      ? 'var(--accent-red)' 
+                      : current >= target 
+                        ? 'var(--accent)' 
+                        : 'var(--accent-blue)' 
+                  }}>
                     {Math.round(pct)}%
                   </span>
                 </div>
 
                 {/* Progress bar */}
                 <div className="progress-bar-track" style={{ height: 8 }}>
-                  <div className="progress-bar-fill" style={{ width: `${pct}%`, background: current >= target ? 'var(--accent)' : 'var(--accent-blue)', boxShadow: `0 0 10px ${current >= target ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.3)'}` }} />
+                  <div className="progress-bar-fill" style={{ 
+                    width: `${pct}%`, 
+                    background: isNegative 
+                      ? 'var(--accent-red)' 
+                      : current >= target 
+                        ? 'var(--accent)' 
+                        : 'var(--accent-blue)', 
+                    boxShadow: isNegative 
+                      ? 'none' 
+                      : `0 0 10px ${current >= target ? 'rgba(16,185,129,0.3)' : 'rgba(59,130,246,0.3)'}` 
+                  }} />
                 </div>
 
                 {/* Required savings and deadline */}
@@ -421,7 +450,7 @@ export default function GoalsPage() {
                 {remaining > 0 && daysRemaining > 0 && (
                   <div style={{ background: 'var(--bg-hover)', padding: '0.625rem 0.75rem', borderRadius: 8, fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
                     <span>Aporte mensal sugerido:</span>
-                    <span style={{ color: 'var(--accent-blue)' }}>{formatCurrency(monthlySavingNeeded)}/mês</span>
+                    <span style={{ color: isNegative ? 'var(--accent-red)' : 'var(--accent-blue)' }}>{formatCurrency(monthlySavingNeeded)}/mês</span>
                   </div>
                 )}
 

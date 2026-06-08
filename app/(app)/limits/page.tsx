@@ -169,41 +169,51 @@ export default function LimitsPage() {
       </div>
 
       {/* Summary Card */}
-      <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem', background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%)', position: 'relative', overflow: 'hidden' }}>
+      <div className="glass-card" style={{
+        padding: 'clamp(1.25rem, 3vw, 2rem)',
+        marginBottom: '1.5rem',
+        background: 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-elevated) 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
         <div style={{ position: 'absolute', right: -50, top: -50, width: 200, height: 200, background: 'var(--accent-red)', opacity: 0.03, filter: 'blur(35px)', borderRadius: '50%' }} />
-        
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.5rem' }}>Consumo Consolidado dos Limites</p>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem' }}>
-              <span style={{ fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.04em', color: 'var(--text-primary)', lineHeight: 1 }}>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.5rem' }}>Consumo Consolidado dos Limites</p>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', flexWrap: 'wrap', minWidth: 0 }}>
+              <span
+                className="money-hero money-value"
+                style={{ fontWeight: 800, letterSpacing: '-0.04em', color: 'var(--text-primary)', lineHeight: 1 }}
+                title={formatCurrency(totalSpent)}
+              >
                 {formatCurrency(totalSpent)}
               </span>
               {totalLimit > 0 && (
-                <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
+                <span style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2, whiteSpace: 'nowrap' }}>
                   / {formatCurrency(totalLimit)}
                 </span>
               )}
             </div>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginTop: '0.5rem', fontWeight: 500 }}>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: '0.5rem', fontWeight: 500 }}>
               Soma total dos limites definidos para controle de saídas.
             </p>
           </div>
-          
-          <div style={{ width: 110, height: 110, position: 'relative' }}>
+
+          <div style={{ width: 100, height: 100, position: 'relative', flexShrink: 0 }}>
             <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%' }}>
               <circle cx="18" cy="18" r="16" fill="none" stroke="var(--bg-elevated)" strokeWidth="3.5" />
-              <circle 
-                cx="18" cy="18" r="16" fill="none" 
-                stroke={totalPct >= 90 ? 'var(--accent-red)' : totalPct >= 70 ? 'var(--accent-amber)' : 'var(--accent)'} 
-                strokeWidth="3.5" 
+              <circle
+                cx="18" cy="18" r="16" fill="none"
+                stroke={totalPct >= 90 ? 'var(--accent-red)' : totalPct >= 70 ? 'var(--accent-amber)' : 'var(--accent)'}
+                strokeWidth="3.5"
                 strokeDasharray={`${totalPct}, 100`}
                 strokeLinecap="round"
                 transform="rotate(-90 18 18)"
               />
             </svg>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: totalPct >= 90 ? 'var(--accent-red)' : totalPct >= 70 ? 'var(--accent-amber)' : 'var(--text-primary)' }}>
+              <span style={{ fontSize: '1.125rem', fontWeight: 800, color: totalPct >= 90 ? 'var(--accent-red)' : totalPct >= 70 ? 'var(--accent-amber)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                 {Math.round(totalPct)}%
               </span>
             </div>
@@ -235,7 +245,8 @@ export default function LimitsPage() {
             
             const spent = Number(limit.current_usage)
             const limitAmount = Number(limit.monthly_limit)
-            const pct = limitAmount > 0 ? Math.min((spent / limitAmount) * 100, 100) : 0
+            const pct = limitAmount > 0 ? (spent / limitAmount) * 100 : 0
+            const visualPct = Math.min(pct, 100)
             const over = spent > limitAmount
             const attention = pct >= limit.alert_threshold && !over
 
@@ -288,23 +299,27 @@ export default function LimitsPage() {
                 </div>
 
                 {/* Progress Stats */}
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
-                  <div>
-                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: statusColor }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '0.625rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span
+                      className="money-value"
+                      style={{ fontSize: 'var(--text-money-md)', fontWeight: 800, color: statusColor }}
+                      title={formatCurrency(spent)}
+                    >
                       {formatCurrency(spent)}
                     </span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       {' '} / {formatCurrency(limitAmount)}
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 700, color: statusColor }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: statusColor, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                     {Math.round(pct)}%
                   </span>
                 </div>
 
                 {/* Progress Bar */}
                 <div className="progress-bar-track" style={{ height: 8, marginBottom: '0.75rem' }}>
-                  <div className={`progress-bar-fill ${barClass}`} style={{ width: `${pct}%`, boxShadow: `0 0 10px ${statusColor}40` }} />
+                  <div className={`progress-bar-fill ${barClass}`} style={{ width: `${visualPct}%`, boxShadow: `0 0 10px ${statusColor}40` }} />
                 </div>
                 
                 {/* Visual Feedback Alerts */}
@@ -373,11 +388,11 @@ export default function LimitsPage() {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))', gap: '1rem' }}>
                 <div>
                   <label className="input-label" htmlFor="limit-amount">Limite mensal (R$)</label>
                   <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>R$</span>
+                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600, pointerEvents: 'none' }}>R$</span>
                     <input id="limit-amount" className="input" type="number" step="0.01" min="0.01" placeholder="0.00" value={monthlyLimit} onChange={e => setMonthlyLimit(e.target.value)} required style={{ paddingLeft: '2.5rem', fontSize: '1.125rem', fontWeight: 600 }} />
                   </div>
                 </div>
@@ -385,7 +400,7 @@ export default function LimitsPage() {
                   <label className="input-label" htmlFor="limit-threshold">Gatilho de Alerta (%)</label>
                   <div style={{ position: 'relative' }}>
                     <input id="limit-threshold" className="input" type="number" min="10" max="100" placeholder="80" value={alertThreshold} onChange={e => setAlertThreshold(e.target.value)} required style={{ paddingRight: '2rem', fontSize: '1.125rem', fontWeight: 600 }} />
-                    <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600 }}>%</span>
+                    <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: 600, pointerEvents: 'none' }}>%</span>
                   </div>
                 </div>
               </div>

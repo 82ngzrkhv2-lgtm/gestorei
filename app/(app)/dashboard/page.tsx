@@ -446,10 +446,19 @@ export default function DashboardPage() {
             </div>
             
             <h1 style={{
-              fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.04em',
+              fontSize: 'clamp(1.75rem, 7vw, 2.5rem)',
+              fontWeight: 800,
+              letterSpacing: '-0.04em',
               color: activeBalance >= 0 ? '#000' : 'var(--accent-red)',
-              lineHeight: 1.1, marginBottom: '0.25rem',
-            }}>
+              lineHeight: 1.1,
+              marginBottom: '0.25rem',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+              title={formatCurrency(activeBalance)}
+            >
               {formatCurrency(activeBalance)}
             </h1>
             <p style={{ fontSize: '0.8125rem', color: activeBalance >= 0 ? 'rgba(0,0,0,0.7)' : 'var(--text-muted)', fontWeight: 500 }}>
@@ -502,14 +511,13 @@ export default function DashboardPage() {
       )}
 
       {/* ── Period Selector & Stats ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Resumo <span style={{ color: 'var(--text-muted)' }}>{periodLabel}</span></h2>
-        
-        <select 
-          className="input" 
-          value={period} 
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 700 }}>Resumo <span style={{ color: 'var(--text-muted)' }}>{periodLabel}</span></h2>
+        <select
+          className="input"
+          value={period}
           onChange={(e) => setPeriod(e.target.value as PeriodFilter)}
-          style={{ width: 'auto', padding: '0.5rem 2.5rem 0.5rem 1rem', fontSize: '0.875rem' }}
+          style={{ width: 'auto', padding: '0.5rem 2.5rem 0.5rem 1rem', fontSize: 'var(--text-sm)' }}
         >
           {Object.entries(PERIOD_LABELS).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
@@ -668,7 +676,8 @@ export default function DashboardPage() {
               goals.slice(0, 3).map(goal => {
                 const target = Number(goal.target_amount)
                 const current = Number(goal.current_amount)
-                const pct = Math.min(100, target > 0 ? (current / target) * 100 : 0)
+                const isNegative = current < 0
+                const pct = target > 0 ? Math.max(0, Math.min((current / target) * 100, 100)) : 0
 
                 const today = new Date()
                 today.setHours(0,0,0,0)
@@ -688,10 +697,10 @@ export default function DashboardPage() {
                           <span style={{ fontSize: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 185, 129, 0.12)', color: 'var(--accent)', padding: '2px 4px', borderRadius: 4 }} title="Sincronizada automaticamente">Auto 🔄</span>
                         )}
                       </span>
-                      <span style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{Math.round(pct)}%</span>
+                      <span style={{ color: isNegative ? 'var(--accent-red)' : 'var(--accent-blue)', fontWeight: 700 }}>{Math.round(pct)}%</span>
                     </div>
                     <div className="progress-bar-track" style={{ height: 6 }}>
-                      <div className="progress-bar-fill bg-info" style={{ width: `${pct}%` }} />
+                      <div className={`progress-bar-fill ${isNegative ? 'bg-danger' : 'bg-info'}`} style={{ width: `${pct}%` }} />
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-secondary)' }}>
                       <span>Guardado: {formatCurrency(current)} / {formatCurrency(target)}</span>

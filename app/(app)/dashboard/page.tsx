@@ -61,7 +61,7 @@ export default function DashboardPage() {
       limitsQuery = limitsQuery.or(`account_id.is.null,account_id.eq.${selectedView}`)
     }
 
-    let goalsQuery = supabase.from('financial_goals').select('*, account:accounts(name,color)').eq('status', 'in_progress').order('created_at', { ascending: false }).limit(5)
+    let goalsQuery = supabase.from('financial_goals').select('*, account:accounts!account_id(name,color)').eq('status', 'in_progress').order('created_at', { ascending: false }).limit(5)
     if (selectedView !== 'consolidated') {
       goalsQuery = goalsQuery.or(`account_id.eq.${selectedView},linked_account_id.eq.${selectedView}`)
     }

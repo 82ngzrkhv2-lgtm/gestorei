@@ -43,7 +43,7 @@ export default function GoalsPage() {
 
   const load = useCallback(async () => {
     const [{ data: gs }, { data: accs }, { data: cats }, { data: txs }] = await Promise.all([
-      supabase.from('financial_goals').select('*, account:accounts(name,color)').order('created_at', { ascending: false }),
+      supabase.from('financial_goals').select('*, account:accounts!account_id(name,color)').order('created_at', { ascending: false }),
       supabase.from('accounts').select('*').eq('is_active', true).order('name'),
       supabase.from('categories').select('*').order('name'),
       supabase.from('transactions').select('category_id, amount, type'),

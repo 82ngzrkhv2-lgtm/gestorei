@@ -56,7 +56,10 @@ export default function AccountsPage() {
     if (editAccount) {
       await supabase.from('accounts').update({ name, type, color, currency, updated_at: new Date().toISOString() }).eq('id', editAccount.id)
     } else {
-      await supabase.from('accounts').insert({ name, type, color, currency, icon: 'wallet', balance: 0 })
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('accounts').insert({ user_id: user.id, name, type, color, currency, icon: 'wallet', balance: 0 })
+      }
     }
     setSaving(false); setShowModal(false); load()
   }

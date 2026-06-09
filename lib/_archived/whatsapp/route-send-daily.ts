@@ -2,20 +2,18 @@
  * POST /api/summaries/send-daily
  *
  * Triggered by Vercel cron (vercel.json) or manually.
- * Schedule: 0 23 * * * (23:00 UTC = 20:00 BRT)
- * Protected by CRON_SECRET header.
+ * Protected by SUMMARY_CRON_SECRET header.
  *
- * For each user with daily_summary_enabled = true:
- *   1. Computes daily metrics
- *   2. Generates insights
- *   3. Builds structured payload
- *   4. Saves to `user_summaries` table (in-app notification)
+ * Fetches all users with daily_summary_enabled = true,
+ * computes metrics, generates insights, builds the message
+ * and sends via WhatsApp.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { computeDailyMetrics } from '@/lib/metrics-engine'
 import { generateDailyInsights } from '@/lib/insight-engine'
-import { buildDailySummaryPayload } from '@/lib/notification-engine'
+import { buildDailySummaryMessage } from '@/lib/notification-engine'
+import { sendWhatsAppMessage } from '@/lib/whatsapp-service'
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -39,53 +37,33 @@ async function handler(req: NextRequest) {
   }
 
   const supabase = await createClient()
-
-  // Fetch all users with daily summaries enabled
   const { data: settings, error } = await supabase
     .from('user_summary_settings')
-    .select('user_id')
+    .select('user_id, whatsapp_number')
     .eq('daily_summary_enabled', true)
+    .neq('whatsapp_number', '')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   const today = new Date()
-  // Expire in 28 hours — covers late-night users
-  const expiresAt = new Date(today.getTime() + 28 * 60 * 60 * 1000)
-
   const results = []
 
   for (const s of settings ?? []) {
     try {
       const metrics = await computeDailyMetrics(s.user_id, today)
       const insights = generateDailyInsights(metrics)
-      const content = buildDailySummaryPayload(metrics, insights)
-
-      const { error: upsertError } = await supabase
-        .from('user_summaries')
-        .upsert(
-          {
-            user_id: s.user_id,
-            type: 'daily',
-            period_label: content.periodLabel,
-            content,
-            generated_at: today.toISOString(),
-            dismissed_at: null,
-            expires_at: expiresAt.toISOString(),
-          },
-          // Replace any existing unread daily summary for this user
-          { onConflict: 'user_id,type', ignoreDuplicates: false },
-        )
-
-      if (upsertError) throw upsertError
-
-      results.push({ userId: s.user_id, success: true })
+      const message = buildDailySummaryMessage(metrics, insights)
+      const result = await sendWhatsAppMessage(s.whatsapp_number, message)
+      results.push({ userId: s.user_id, ...result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       results.push({ userId: s.user_id, success: false, error: msg })
     }
   }
 
-  return NextResponse.json({ generated: results.length, results })
+  return NextResponse.json({ sent: results.length, results })
 }
+
+

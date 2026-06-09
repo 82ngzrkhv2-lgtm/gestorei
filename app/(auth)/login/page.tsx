@@ -30,33 +30,37 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="glass-card animate-scale-in" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '1.75rem', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '0.375rem' }}>
-          Entrar
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Bem-vindo de volta ao seu cockpit
+    <div style={{ width: '100%', animation: 'fadeIn 0.5s ease-out' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#fff', marginBottom: '0.5rem' }}>
+          Acessar Gestorei
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+          Bem-vindo de volta. Pronto para dominar suas finanças?
         </p>
       </div>
 
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
-          <label className="input-label" htmlFor="login-email">Email</label>
+          <label className="input-label" htmlFor="login-email">Email profissional</label>
           <input
             id="login-email"
             className="input"
             type="email"
-            placeholder="seu@email.com"
+            placeholder="voce@empresa.com"
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
             autoComplete="email"
+            style={{ height: '3rem', fontSize: '1rem' }}
           />
         </div>
 
         <div>
-          <label className="input-label" htmlFor="login-password">Senha</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="input-label" htmlFor="login-password">Senha</label>
+            {/* Future improvement: Forgot password link */}
+          </div>
           <input
             id="login-password"
             className="input"
@@ -66,12 +70,13 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            style={{ height: '3rem', fontSize: '1rem', letterSpacing: password ? '0.2em' : 'normal' }}
           />
         </div>
 
         {error && (
-          <div className="alert-banner alert-critical" role="alert">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+          <div className="alert-banner alert-critical" role="alert" style={{ borderRadius: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
               <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
             {error}
@@ -81,26 +86,26 @@ export default function LoginPage() {
         <button
           id="login-submit"
           type="submit"
-          className="btn btn-primary btn-lg"
+          className="btn btn-primary"
           disabled={loading}
-          style={{ marginTop: '0.25rem', width: '100%' }}
+          style={{ height: '3.25rem', fontSize: '1.0625rem', marginTop: '0.5rem', borderRadius: 12, fontWeight: 700 }}
         >
           {loading ? (
-            <svg className="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity="0.25"/>
               <path d="M21 12a9 9 0 00-9-9"/>
             </svg>
           ) : (
-            'Entrar'
+            'Entrar no sistema'
           )}
         </button>
       </form>
 
-      <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-          Não tem conta?{' '}
-          <Link href="/signup" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
-            Criar conta grátis
+      <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+        <p style={{ fontSize: '0.9375rem', color: 'var(--text-secondary)' }}>
+          Ainda não tem uma conta?{' '}
+          <Link href="/signup" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', transition: 'opacity 0.2s' }}>
+            Começar grátis
           </Link>
         </p>
       </div>
@@ -112,6 +117,10 @@ export default function LoginPage() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

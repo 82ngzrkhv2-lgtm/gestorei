@@ -2,19 +2,14 @@
  * POST /api/summaries/send-weekly
  *
  * Triggered by Vercel cron every Saturday at 09:00 UTC (06:00 BRT).
- * Protected by CRON_SECRET header.
- *
- * For each user with weekly_summary_enabled = true:
- *   1. Computes weekly metrics (Mon–Sun of the past week)
- *   2. Generates insights
- *   3. Builds structured payload
- *   4. Saves to `user_summaries` table (in-app notification, 72h validity)
+ * Protected by SUMMARY_CRON_SECRET header.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { computeWeeklyMetrics } from '@/lib/metrics-engine'
 import { generateWeeklyInsights } from '@/lib/insight-engine'
-import { buildWeeklySummaryPayload } from '@/lib/notification-engine'
+import { buildWeeklySummaryMessage } from '@/lib/notification-engine'
+import { sendWhatsAppMessage } from '@/lib/whatsapp-service'
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -25,11 +20,12 @@ function isAuthorized(req: NextRequest): boolean {
 
 function getCurrentWeekRange(): { weekStart: Date; weekEnd: Date } {
   const today = new Date()
-  // Saturday cron: week ended yesterday (Friday)
+  const day = today.getDay() // 0=Sun
   const weekEnd = new Date(today)
-  weekEnd.setDate(today.getDate() - 1)
+  weekEnd.setDate(today.getDate() - 1) // yesterday (Friday)
   const weekStart = new Date(weekEnd)
-  weekStart.setDate(weekEnd.getDate() - 6)
+  weekStart.setDate(weekEnd.getDate() - 6) // 7 days ago
+  void day
   return { weekStart, weekEnd }
 }
 
@@ -48,52 +44,31 @@ async function handler(req: NextRequest) {
   }
 
   const supabase = await createClient()
-
   const { data: settings, error } = await supabase
     .from('user_summary_settings')
-    .select('user_id')
+    .select('user_id, whatsapp_number')
     .eq('weekly_summary_enabled', true)
+    .neq('whatsapp_number', '')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const now = new Date()
   const { weekStart, weekEnd } = getCurrentWeekRange()
-  // Weekly summaries are valid for 72 hours (through the weekend + Monday)
-  const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000)
-
   const results = []
 
   for (const s of settings ?? []) {
     try {
       const metrics = await computeWeeklyMetrics(s.user_id, weekStart, weekEnd)
       const insights = generateWeeklyInsights(metrics)
-      const content = buildWeeklySummaryPayload(metrics, insights)
-
-      const { error: upsertError } = await supabase
-        .from('user_summaries')
-        .upsert(
-          {
-            user_id: s.user_id,
-            type: 'weekly',
-            period_label: content.periodLabel,
-            content,
-            generated_at: now.toISOString(),
-            dismissed_at: null,
-            expires_at: expiresAt.toISOString(),
-          },
-          { onConflict: 'user_id,type', ignoreDuplicates: false },
-        )
-
-      if (upsertError) throw upsertError
-
-      results.push({ userId: s.user_id, success: true })
+      const message = buildWeeklySummaryMessage(metrics, insights)
+      const result = await sendWhatsAppMessage(s.whatsapp_number, message)
+      results.push({ userId: s.user_id, ...result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       results.push({ userId: s.user_id, success: false, error: msg })
     }
   }
 
-  return NextResponse.json({ generated: results.length, results })
+  return NextResponse.json({ sent: results.length, results })
 }

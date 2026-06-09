@@ -2,16 +2,17 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'FinCockpit — Controle Financeiro Pessoal e Empresarial',
-  description: 'Cockpit financeiro inteligente para você ter clareza, separação e controle total do seu dinheiro pessoal e empresarial.',
+  title: 'Gestorei — Controle Financeiro Pessoal e Empresarial',
+  description: 'Seu copiloto financeiro inteligente. Conecte contas, automatize métricas e tome decisões com base em dados reais.',
   keywords: ['finanças', 'controle financeiro', 'gestão financeira', 'fintech', 'orçamento'],
-  authors: [{ name: 'FinCockpit' }],
+  authors: [{ name: 'Gestorei' }],
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'FinCockpit',
+    title: 'Gestorei',
   },
   manifest: '/manifest.json',
+  themeColor: '#090d16',
 }
 
 export const viewport: Viewport = {

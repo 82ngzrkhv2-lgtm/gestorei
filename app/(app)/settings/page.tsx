@@ -2,12 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { UserSummarySettings } from '@/types/database'
+import type { SummaryPayload } from '@/lib/notification-engine'
+import dynamic from 'next/dynamic'
 
-// ─── Default settings ────────────────────────────────────────────────────────────
+const SummaryPopup = dynamic(() => import('@/components/shared/SummaryPopup'), { ssr: false })
 
-const DEFAULT_SETTINGS: Omit<UserSummarySettings, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
-  whatsapp_number: '',
+// ─── Default settings ─────────────────────────────────────────────────────────
+
+interface SummarySettings {
+  daily_summary_enabled: boolean
+  weekly_summary_enabled: boolean
+  monthly_summary_enabled: boolean
+  daily_send_hour: number
+  weekly_send_day: number
+  monthly_send_day: number
+}
+
+const DEFAULT_SETTINGS: SummarySettings = {
   daily_summary_enabled: true,
   weekly_summary_enabled: true,
   monthly_summary_enabled: true,
@@ -16,17 +27,11 @@ const DEFAULT_SETTINGS: Omit<UserSummarySettings, 'id' | 'user_id' | 'created_at
   monthly_send_day: 1,
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type SummaryType = 'daily' | 'weekly' | 'monthly'
 
-interface PreviewState {
-  message: string
-  loading: boolean
-  error: string | null
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function Toggle({
   id,
@@ -119,7 +124,7 @@ function HealthBadge({ emoji, label, color }: { emoji: string; label: string; co
   )
 }
 
-// ─── Preview Modal ────────────────────────────────────────────────────────────────
+// ─── Preview Modal ────────────────────────────────────────────────────────────
 
 function PreviewModal({
   type,
@@ -128,9 +133,9 @@ function PreviewModal({
   type: SummaryType
   onClose: () => void
 }) {
-  const [state, setState] = useState<PreviewState>({ message: '', loading: true, error: null })
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [payload, setPayload] = useState<SummaryPayload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/summaries/preview', {
@@ -140,27 +145,12 @@ function PreviewModal({
     })
       .then(r => r.json())
       .then(data => {
-        if (data.error) setState({ message: '', loading: false, error: data.error })
-        else setState({ message: data.message, loading: false, error: null })
+        if (data.error) setError(data.error)
+        else setPayload(data.payload as SummaryPayload)
       })
-      .catch(err => setState({ message: '', loading: false, error: err.message }))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
   }, [type])
-
-  async function handleSend() {
-    setSending(true)
-    try {
-      const r = await fetch('/api/summaries/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, send: true }),
-      })
-      const data = await r.json()
-      if (data.error) setState(s => ({ ...s, error: data.error }))
-      else setSent(true)
-    } finally {
-      setSending(false)
-    }
-  }
 
   const typeLabels: Record<SummaryType, string> = {
     daily: 'Diário',
@@ -168,156 +158,92 @@ function PreviewModal({
     monthly: 'Mensal',
   }
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 400,
-          animation: 'fadeIn 0.2s ease both',
-        }}
-      />
-
-      {/* Panel */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Preview do Resumo ${typeLabels[type]}`}
-        style={{
-          position: 'fixed',
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 'min(540px, 94vw)',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          background: 'var(--bg-card)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 20,
-          boxShadow: 'var(--shadow-lg)',
-          zIndex: 401,
-          animation: 'scaleIn 0.25s cubic-bezier(0.16,1,0.3,1) both',
-          padding: '1.75rem',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <div>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, margin: 0 }}>
-              📱 Preview — Resumo {typeLabels[type]}
-            </h2>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
-              Prévia da mensagem que será enviada ao WhatsApp
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="btn btn-ghost btn-icon"
-            aria-label="Fechar"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+  if (loading) {
+    return (
+      <>
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 400,
+          }}
+        />
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'min(540px, 94vw)',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 20,
+            zIndex: 401,
+            padding: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div className="spinner" />
         </div>
+      </>
+    )
+  }
 
-        {/* Content */}
-        {state.loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120 }}>
-            <div className="spinner" />
-          </div>
-        ) : state.error ? (
-          <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-            <p style={{ color: 'var(--accent-red)' }}>{state.error}</p>
-          </div>
-        ) : (
-          <>
-            {/* WhatsApp message bubble */}
-            <div style={{
-              background: '#0b141a',
-              borderRadius: 16,
-              padding: '1.25rem',
-              fontFamily: '"Segoe UI", sans-serif',
-              fontSize: '0.875rem',
-              lineHeight: 1.6,
-              marginBottom: '1.25rem',
-            }}>
-              <div style={{
-                background: '#1f2c34',
-                borderRadius: 12,
-                borderTopLeftRadius: 4,
-                padding: '0.875rem 1rem',
-                color: '#e9edef',
-                maxWidth: '90%',
-                whiteSpace: 'pre-line',
-                wordBreak: 'break-word',
-              }}>
-                {state.message}
-              </div>
-              <p style={{ color: '#667781', fontSize: '0.6875rem', marginTop: '0.375rem', textAlign: 'right' }}>
-                Prévia • FinCockpit
-              </p>
-            </div>
+  if (error) {
+    return (
+      <>
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 400,
+          }}
+        />
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 'min(540px, 94vw)',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 20,
+            zIndex: 401,
+            padding: '2rem',
+          }}
+        >
+          <p style={{ color: 'var(--accent-red)', margin: 0 }}>{error}</p>
+          <button onClick={onClose} className="btn btn-ghost" style={{ marginTop: '1rem' }}>Fechar</button>
+        </div>
+      </>
+    )
+  }
 
-            {/* Actions */}
-            {sent ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-                padding: '0.875rem 1rem',
-                background: 'rgba(37,211,102,0.1)',
-                border: '1px solid rgba(37,211,102,0.25)',
-                borderRadius: 12,
-                color: '#25D366',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                Mensagem enviada com sucesso!
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button onClick={onClose} className="btn btn-ghost">
-                  Fechar
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={sending}
-                  className="btn btn-primary"
-                  id={`send-preview-${type}-btn`}
-                  style={{ background: '#25D366', borderColor: '#25D366', color: '#fff' }}
-                >
-                  {sending ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <div className="spinner" style={{ width: 14, height: 14 }} /> Enviando...
-                    </span>
-                  ) : (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                      </svg>
-                      Enviar agora
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>
-  )
+  if (payload) {
+    return (
+      <SummaryPopup
+        summaryId="preview"
+        type={type}
+        periodLabel={`Preview — Resumo ${typeLabels[type]}`}
+        payload={payload}
+        onDismiss={onClose}
+      />
+    )
+  }
+
+  return null
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────────
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const supabase = createClient()
-  const [settings, setSettings] = useState<Omit<UserSummarySettings, 'id' | 'user_id' | 'created_at' | 'updated_at'>>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<SummarySettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -338,7 +264,6 @@ export default function SettingsPage() {
 
       if (data) {
         setSettings({
-          whatsapp_number: data.whatsapp_number ?? '',
           daily_summary_enabled: data.daily_summary_enabled ?? true,
           weekly_summary_enabled: data.weekly_summary_enabled ?? true,
           monthly_summary_enabled: data.monthly_summary_enabled ?? true,
@@ -362,7 +287,10 @@ export default function SettingsPage() {
 
       const { error: upsertError } = await supabase
         .from('user_summary_settings')
-        .upsert({ user_id: user.id, ...settings, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+        .upsert(
+          { user_id: user.id, ...settings, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' },
+        )
 
       if (upsertError) throw upsertError
 
@@ -375,7 +303,7 @@ export default function SettingsPage() {
     }
   }, [supabase, settings])
 
-  // Hour options 18–23
+  // Hour options 16–23
   const hourOptions = Array.from({ length: 8 }, (_, i) => i + 16).map(h => ({
     value: h,
     label: `${String(h).padStart(2, '0')}:00`,
@@ -405,50 +333,32 @@ export default function SettingsPage() {
       {/* Page header */}
       <div className="page-header" style={{ marginBottom: '2rem' }}>
         <div>
-          <h1 className="page-title">Notificações WhatsApp</h1>
-          <p className="page-subtitle">Configure os resumos financeiros automáticos enviados ao seu WhatsApp.</p>
+          <h1 className="page-title">Resumos Financeiros</h1>
+          <p className="page-subtitle">Configure os resumos automáticos que aparecem ao abrir o aplicativo.</p>
         </div>
       </div>
 
       <div style={{ display: 'grid', gap: '1.25rem', maxWidth: 720 }}>
 
-        {/* WhatsApp number */}
-        <div className="card" style={{ padding: '1.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            <div style={{
-              width: 40, height: 40,
-              background: 'rgba(37,211,102,0.12)',
-              border: '1px solid rgba(37,211,102,0.25)',
-              borderRadius: 12,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#25D366',
-              flexShrink: 0,
-            }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/>
-              </svg>
-            </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Número WhatsApp</h2>
-              <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                Insira o número que receberá os resumos
-              </p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="whatsapp-number">
-              Número com DDD (ex: 11999999999)
-            </label>
-            <input
-              id="whatsapp-number"
-              type="tel"
-              className="input"
-              placeholder="11999999999"
-              value={settings.whatsapp_number}
-              onChange={e => setSettings(s => ({ ...s, whatsapp_number: e.target.value.replace(/\D/g, '') }))}
-              maxLength={13}
-            />
+        {/* Info banner */}
+        <div
+          style={{
+            padding: '1rem 1.25rem',
+            background: 'rgba(16,185,129,0.06)',
+            border: '1px solid rgba(16,185,129,0.2)',
+            borderRadius: 14,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.875rem',
+          }}
+        >
+          <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>💡</span>
+          <div>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              Os resumos são gerados automaticamente e exibidos como notificações ao abrir o app.
+              O <strong>resumo diário</strong> aparece à noite, o <strong>semanal</strong> no fim de semana
+              e o <strong>mensal</strong> no início de cada mês.
+            </p>
           </div>
         </div>
 
@@ -464,15 +374,14 @@ export default function SettingsPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: 'var(--accent)',
                 flexShrink: 0,
+                fontSize: '1.125rem',
               }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-                </svg>
+                📊
               </div>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Resumo Diário</h2>
                 <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                  Entradas, saídas e resultado do dia
+                  Entradas, saídas, resultado e alertas do dia
                 </p>
               </div>
             </div>
@@ -486,7 +395,7 @@ export default function SettingsPage() {
           {settings.daily_summary_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" htmlFor="daily-hour-select">Horário de envio</label>
+                <label className="form-label" htmlFor="daily-hour-select">Horário de geração</label>
                 <Select
                   id="daily-hour-select"
                   value={settings.daily_send_hour}
@@ -521,10 +430,9 @@ export default function SettingsPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#6366f1',
                 flexShrink: 0,
+                fontSize: '1.125rem',
               }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
+                📈
               </div>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Resumo Semanal</h2>
@@ -543,7 +451,7 @@ export default function SettingsPage() {
           {settings.weekly_summary_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" htmlFor="weekly-day-select">Dia de envio</label>
+                <label className="form-label" htmlFor="weekly-day-select">Dia de geração</label>
                 <Select
                   id="weekly-day-select"
                   value={settings.weekly_send_day}
@@ -578,10 +486,9 @@ export default function SettingsPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: 'var(--accent-amber)',
                 flexShrink: 0,
+                fontSize: '1.125rem',
               }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-                </svg>
+                🏆
               </div>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Fechamento Mensal</h2>
@@ -600,7 +507,7 @@ export default function SettingsPage() {
           {settings.monthly_summary_enabled && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div className="form-group" style={{ margin: 0 }}>
-                <label className="form-label" htmlFor="monthly-day-select">Quando enviar</label>
+                <label className="form-label" htmlFor="monthly-day-select">Quando gerar</label>
                 <Select
                   id="monthly-day-select"
                   value={settings.monthly_send_day}
@@ -629,7 +536,7 @@ export default function SettingsPage() {
             Status de Saúde Financeira
           </h2>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
-            Indicador que aparece em todos os resumos, calculado em tempo real.
+            Indicador calculado em tempo real e exibido em todos os resumos.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
             <HealthBadge emoji="🟢" label="Saudável" color="#10b981" />

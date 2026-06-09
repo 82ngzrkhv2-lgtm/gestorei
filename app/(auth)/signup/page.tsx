@@ -15,9 +15,18 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  // Password strength visual indicator
+  const isPasswordStrong = password.length >= 8
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    
+    if (!isPasswordStrong) {
+      setError('A senha deve ter pelo menos 8 caracteres para sua segurança.')
+      return
+    }
+
     setLoading(true)
 
     const { error } = await supabase.auth.signUp({
@@ -47,46 +56,55 @@ export default function SignupPage() {
 
   if (success) {
     return (
-      <div className="glass-card animate-scale-in" style={{ padding: '2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
-        <h2 style={{ marginBottom: '0.5rem' }}>Conta criada!</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-          Verifique seu email para confirmar o cadastro.
+      <div style={{ width: '100%', textAlign: 'center', animation: 'fadeIn 0.5s ease-out' }}>
+        <div style={{ 
+          width: 64, height: 64, background: 'rgba(16,185,129,0.15)', color: '#10b981', 
+          borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+          margin: '0 auto 1.5rem', border: '1px solid rgba(16,185,129,0.3)' 
+        }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.75rem', color: '#fff' }}>Verifique seu email</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '2rem', lineHeight: 1.5 }}>
+          Acabamos de enviar um link de confirmação para <b>{email}</b>. Clique nele para ativar seu cockpit financeiro.
         </p>
-        <Link href="/login" className="btn btn-primary" style={{ width: '100%' }}>
-          Ir para o login
+        <Link href="/login" className="btn btn-ghost" style={{ width: '100%', height: '3.25rem', fontSize: '1.0625rem', borderRadius: 12 }}>
+          Voltar para o Login
         </Link>
       </div>
     )
   }
 
   return (
-    <div className="glass-card animate-scale-in" style={{ padding: '2rem' }}>
-      <div style={{ marginBottom: '1.75rem', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '0.375rem' }}>
-          Criar conta
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Comece a ter controle real do seu dinheiro
+    <div style={{ width: '100%', animation: 'fadeIn 0.5s ease-out' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#fff', marginBottom: '0.5rem' }}>
+          Criar sua conta
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9375rem' }}>
+          Descubra para onde seu dinheiro está indo, em 2 minutos.
         </p>
       </div>
 
-      <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
-          <label className="input-label" htmlFor="signup-name">Nome</label>
+          <label className="input-label" htmlFor="signup-name">Nome completo</label>
           <input
             id="signup-name"
             className="input"
             type="text"
-            placeholder="Seu nome"
+            placeholder="Como devemos chamar você?"
             value={name}
             onChange={e => setName(e.target.value)}
             required
+            style={{ height: '3rem', fontSize: '1rem' }}
           />
         </div>
 
         <div>
-          <label className="input-label" htmlFor="signup-email">Email</label>
+          <label className="input-label" htmlFor="signup-email">Email principal</label>
           <input
             id="signup-email"
             className="input"
@@ -96,56 +114,89 @@ export default function SignupPage() {
             onChange={e => setEmail(e.target.value)}
             required
             autoComplete="email"
+            style={{ height: '3rem', fontSize: '1rem' }}
           />
         </div>
 
         <div>
-          <label className="input-label" htmlFor="signup-password">Senha</label>
+          <label className="input-label" htmlFor="signup-password">Senha segura</label>
           <input
             id="signup-password"
             className="input"
             type="password"
-            placeholder="Mínimo 6 caracteres"
+            placeholder="Mínimo 8 caracteres"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
-            minLength={6}
             autoComplete="new-password"
+            style={{ 
+              height: '3rem', fontSize: '1rem', 
+              letterSpacing: password ? '0.2em' : 'normal',
+              borderColor: password && !isPasswordStrong ? 'var(--accent-red)' : password && isPasswordStrong ? 'var(--accent-green)' : ''
+            }}
           />
+          {password && !isPasswordStrong && (
+            <p style={{ margin: '0.375rem 0 0', fontSize: '0.75rem', color: 'var(--accent-red)' }}>A senha precisa ter pelo menos 8 caracteres.</p>
+          )}
         </div>
 
         {error && (
-          <div className="alert-banner alert-critical" role="alert">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+          <div className="alert-banner alert-critical" role="alert" style={{ borderRadius: 12 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
               <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
             {error}
           </div>
         )}
 
-        <button
-          id="signup-submit"
-          type="submit"
-          className="btn btn-primary btn-lg"
-          disabled={loading}
-          style={{ marginTop: '0.25rem', width: '100%' }}
-        >
-          {loading ? 'Criando conta...' : 'Criar conta grátis'}
-        </button>
+        <div style={{ marginTop: '0.5rem' }}>
+          <button
+            id="signup-submit"
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading || (password.length > 0 && !isPasswordStrong)}
+            style={{ height: '3.25rem', fontSize: '1.0625rem', width: '100%', borderRadius: 12, fontWeight: 700 }}
+          >
+            {loading ? (
+              <svg className="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity="0.25"/>
+                <path d="M21 12a9 9 0 00-9-9"/>
+              </svg>
+            ) : (
+              'Começar grátis e parar de perder dinheiro'
+            )}
+          </button>
+          {/* Urgent-LP Microcopy */}
+          <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+            <span>🔒 Sem cartão de crédito</span>
+            <span>•</span>
+            <span>Cancele com 1 clique</span>
+          </p>
+        </div>
       </form>
 
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '1rem' }}>
-        3 contas criadas automaticamente para você começar 🚀
-      </p>
-
-      <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-          Já tem conta?{' '}
+      <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+        <p style={{ fontSize: '0.9375rem', color: 'var(--text-secondary)' }}>
+          Já possui uma conta?{' '}
           <Link href="/login" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
-            Entrar
+            Fazer login
           </Link>
         </p>
       </div>
+
+      <style>{`
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }

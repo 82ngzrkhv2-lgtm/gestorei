@@ -25,7 +25,7 @@ export default function TransactionsPage() {
   const load = useCallback(async () => {
     let q = supabase
       .from('transactions')
-      .select('*, account:accounts!account_id(name,color), category:categories(name,color)')
+      .select('id, amount, date, description, type, transfer_group_id, account_id, source_account_id, destination_account_id, account:accounts!account_id(name,color), category:categories(name,color)')
       .order('date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(200)

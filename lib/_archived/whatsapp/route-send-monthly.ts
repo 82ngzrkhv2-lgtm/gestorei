@@ -2,19 +2,14 @@
  * POST /api/summaries/send-monthly
  *
  * Triggered by Vercel cron on the 1st of every month at 08:00 UTC.
- * Protected by CRON_SECRET header.
- *
- * For each user with monthly_summary_enabled = true:
- *   1. Computes metrics for the previous full month
- *   2. Generates insights
- *   3. Builds structured payload
- *   4. Saves to `user_summaries` table (in-app notification, 7-day validity)
+ * Protected by SUMMARY_CRON_SECRET header.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { computeMonthlyMetrics } from '@/lib/metrics-engine'
 import { generateMonthlyInsights } from '@/lib/insight-engine'
-import { buildMonthlySummaryPayload } from '@/lib/notification-engine'
+import { buildMonthlySummaryMessage } from '@/lib/notification-engine'
+import { sendWhatsAppMessage } from '@/lib/whatsapp-service'
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -25,9 +20,9 @@ function isAuthorized(req: NextRequest): boolean {
 
 function getLastMonthRange(): { monthStart: Date; monthEnd: Date } {
   const today = new Date()
-  // Last day of previous month
+  // last day of previous month
   const monthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
-  // First day of previous month
+  // first day of previous month
   const monthStart = new Date(monthEnd.getFullYear(), monthEnd.getMonth(), 1)
   return { monthStart, monthEnd }
 }
@@ -47,52 +42,31 @@ async function handler(req: NextRequest) {
   }
 
   const supabase = await createClient()
-
   const { data: settings, error } = await supabase
     .from('user_summary_settings')
-    .select('user_id')
+    .select('user_id, whatsapp_number')
     .eq('monthly_summary_enabled', true)
+    .neq('whatsapp_number', '')
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const now = new Date()
   const { monthStart, monthEnd } = getLastMonthRange()
-  // Monthly summaries are valid for 7 days
-  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
   const results = []
 
   for (const s of settings ?? []) {
     try {
       const metrics = await computeMonthlyMetrics(s.user_id, monthStart, monthEnd)
       const insights = generateMonthlyInsights(metrics)
-      const content = buildMonthlySummaryPayload(metrics, insights)
-
-      const { error: upsertError } = await supabase
-        .from('user_summaries')
-        .upsert(
-          {
-            user_id: s.user_id,
-            type: 'monthly',
-            period_label: content.periodLabel,
-            content,
-            generated_at: now.toISOString(),
-            dismissed_at: null,
-            expires_at: expiresAt.toISOString(),
-          },
-          { onConflict: 'user_id,type', ignoreDuplicates: false },
-        )
-
-      if (upsertError) throw upsertError
-
-      results.push({ userId: s.user_id, success: true })
+      const message = buildMonthlySummaryMessage(metrics, insights)
+      const result = await sendWhatsAppMessage(s.whatsapp_number, message)
+      results.push({ userId: s.user_id, ...result })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       results.push({ userId: s.user_id, success: false, error: msg })
     }
   }
 
-  return NextResponse.json({ generated: results.length, results })
+  return NextResponse.json({ sent: results.length, results })
 }

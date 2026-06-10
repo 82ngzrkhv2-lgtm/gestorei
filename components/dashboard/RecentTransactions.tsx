@@ -131,7 +131,7 @@ export default function RecentTransactions({ transactions, onAdd }: Props) {
 
                 {/* Amount + Date */}
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <p style={{ fontWeight: 700, fontSize: '1rem', color: amountColor }}>
+                  <p className="money-value" style={{ fontWeight: 700, fontSize: '1rem', color: amountColor }}>
                     {amountPrefix}{formatCurrency(Number(tx.amount))}
                   </p>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem', fontWeight: 500 }}>

@@ -96,7 +96,7 @@ export default function AccountsPage() {
           background: totalBalance >= 0 ? 'var(--accent)' : 'var(--accent-red)', opacity: 0.1, filter: 'blur(20px)'
         }} />
         <span className="stat-label">Patrimônio Total</span>
-        <span className="stat-value" style={{ color: totalBalance >= 0 ? 'var(--text-primary)' : 'var(--accent-red)', marginTop: 8 }}>
+        <span className="stat-value money-value" style={{ color: totalBalance >= 0 ? 'var(--text-primary)' : 'var(--accent-red)', marginTop: 8 }}>
           {formatCurrency(totalBalance)}
         </span>
       </div>
@@ -132,7 +132,7 @@ export default function AccountsPage() {
               {/* Balance */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Saldo Atual</p>
-                <p style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.04em', color: Number(a.balance) >= 0 ? 'var(--text-primary)' : 'var(--accent-red)' }}>
+                <p className="money-value" style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.04em', color: Number(a.balance) >= 0 ? 'var(--text-primary)' : 'var(--accent-red)' }}>
                   {formatCurrency(Number(a.balance), a.currency)}
                 </p>
               </div>

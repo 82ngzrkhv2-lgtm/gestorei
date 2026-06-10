@@ -159,7 +159,7 @@ export default function AccountDetailPage() {
                   </p>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                  <p style={{ fontWeight: 700, color: amountColor, fontSize: '1rem' }}>
+                  <p className="money-value" style={{ fontWeight: 700, color: amountColor, fontSize: '1rem' }}>
                     {isIncome ? '+' : '-'}{formatCurrency(Number(tx.amount), account.currency)}
                   </p>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>{formatDateFull(tx.date)}</p>

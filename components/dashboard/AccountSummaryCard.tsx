@@ -63,7 +63,7 @@ export default function AccountSummaryCard({ account }: { account: Account }) {
 
         {/* Balance */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <p style={{
+          <p className="money-value" style={{
             fontWeight: 700, fontSize: '0.9rem',
             color: isNegative ? 'var(--accent-red)' : 'var(--text-primary)',
           }}>

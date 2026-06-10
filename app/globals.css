@@ -398,6 +398,20 @@ p, h1, h2, h3, h4, h5, h6 {
     text-overflow: ellipsis;
   }
 
+  /* ── Privacy Mode (Hide Values) ── */
+  body.privacy-active .money-value {
+    visibility: hidden !important;
+    position: relative;
+  }
+  body.privacy-active .money-value::after {
+    content: 'R$ •••••';
+    visibility: visible;
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-variant-numeric: normal;
+  }
+
   /* ── Section Header ── */
   .section-header {
     display: flex;

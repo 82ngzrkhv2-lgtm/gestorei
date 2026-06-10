@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -11,12 +11,37 @@ export default function SignupPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  
+  // Consents & Legal
+  const [termsVersion, setTermsVersion] = useState<string>('1.0')
+  const [privacyVersion, setPrivacyVersion] = useState<string>('1.0')
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
+  const [whatsappConsent, setWhatsappConsent] = useState(false)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
   // Password strength visual indicator
   const isPasswordStrong = password.length >= 8
+
+  // Fetch active legal versions on mount
+  useEffect(() => {
+    async function fetchVersions() {
+      const { data } = await supabase
+        .from('legal_versions')
+        .select('terms_version, privacy_version')
+        .eq('is_active', true)
+        .single()
+      
+      if (data) {
+        setTermsVersion(data.terms_version)
+        setPrivacyVersion(data.privacy_version)
+      }
+    }
+    fetchVersions()
+  }, [supabase])
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -27,23 +52,40 @@ export default function SignupPage() {
       return
     }
 
+    if (!agreedToTerms || !agreedToPrivacy) {
+      setError('Você precisa concordar com os Termos e a Política de Privacidade.')
+      return
+    }
+
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
-    })
+    try {
+      // Usando nossa nova API Server-Side para garantir IP Hash e gravação segura
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          terms_version: termsVersion,
+          privacy_version: privacyVersion,
+          whatsapp_consent: whatsappConsent
+        })
+      })
 
-    if (error) {
-      setError(error.message === 'User already registered' ? 'Este email já está cadastrado.' : error.message)
-      setLoading(false)
-    } else {
-      // Try to sign in directly
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Erro ao criar conta.')
+        setLoading(false)
+        return
+      }
+
+      // Se API Ok, o usuário foi criado. Mas ele não está logado no cliente ainda.
+      // Tentamos o signInWithPassword. Se falhar por e-mail não confirmado, exibimos a tela de sucesso.
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      
       if (!signInError) {
         router.push('/dashboard')
         router.refresh()
@@ -51,6 +93,10 @@ export default function SignupPage() {
         setSuccess(true)
         setLoading(false)
       }
+
+    } catch (err) {
+      setError('Falha de conexão com o servidor.')
+      setLoading(false)
     }
   }
 
@@ -140,6 +186,47 @@ export default function SignupPage() {
           )}
         </div>
 
+        {/* Módulo de Termos e Consentimentos LGPD */}
+        <div style={{ background: 'var(--bg-elevated)', padding: '1.25rem', borderRadius: 12, border: '1px solid var(--border)' }}>
+          <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fff', marginBottom: '1rem' }}>Sua Privacidade (LGPD)</p>
+          
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', marginBottom: '0.875rem' }}>
+            <input 
+              type="checkbox" 
+              checked={agreedToTerms} 
+              onChange={e => setAgreedToTerms(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Li e concordo com os <Link href="/terms" target="_blank" style={{ color: 'var(--accent)' }}>Termos de Uso</Link> (v{termsVersion}).
+            </span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', marginBottom: '0.875rem' }}>
+            <input 
+              type="checkbox" 
+              checked={agreedToPrivacy} 
+              onChange={e => setAgreedToPrivacy(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              Li e concordo com a <Link href="/privacy" target="_blank" style={{ color: 'var(--accent)' }}>Política de Privacidade</Link> (v{privacyVersion}).
+            </span>
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
+            <input 
+              type="checkbox" 
+              checked={whatsappConsent} 
+              onChange={e => setWhatsappConsent(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+              <b>(Opcional)</b> Autorizo receber notificações, alertas e resumos financeiros no meu WhatsApp.
+            </span>
+          </label>
+        </div>
+
         {error && (
           <div className="alert-banner alert-critical" role="alert" style={{ borderRadius: 12 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
@@ -154,7 +241,7 @@ export default function SignupPage() {
             id="signup-submit"
             type="submit"
             className="btn btn-primary"
-            disabled={loading || (password.length > 0 && !isPasswordStrong)}
+            disabled={loading || (password.length > 0 && !isPasswordStrong) || !agreedToTerms || !agreedToPrivacy}
             style={{ height: '3.25rem', fontSize: '1.0625rem', width: '100%', borderRadius: 12, fontWeight: 700 }}
           >
             {loading ? (
@@ -166,7 +253,6 @@ export default function SignupPage() {
               'Começar grátis e parar de perder dinheiro'
             )}
           </button>
-          {/* Urgent-LP Microcopy */}
           <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
             <span>🔒 Sem cartão de crédito</span>
             <span>•</span>

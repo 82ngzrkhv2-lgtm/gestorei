@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SummaryPayload } from '@/lib/notification-engine'
 import dynamic from 'next/dynamic'
+import DataCenter from './DataCenter'
 
 const SummaryPopup = dynamic(() => import('@/components/shared/SummaryPopup'), { ssr: false })
 
@@ -580,6 +581,10 @@ export default function SettingsPage() {
             )}
           </button>
         </div>
+
+        {/* --- Data Center / LGPD --- */}
+        <DataCenter />
+
       </div>
 
       {/* Preview modal */}

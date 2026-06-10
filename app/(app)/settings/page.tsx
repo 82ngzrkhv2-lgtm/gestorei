@@ -10,22 +10,24 @@ const SummaryPopup = dynamic(() => import('@/components/shared/SummaryPopup'), {
 
 // ─── Default settings ─────────────────────────────────────────────────────────
 
-interface SummarySettings {
+interface NotificationPreferences {
   daily_summary_enabled: boolean
   weekly_summary_enabled: boolean
   monthly_summary_enabled: boolean
-  daily_send_hour: number
-  weekly_send_day: number
-  monthly_send_day: number
+  push_enabled: boolean
+  preferred_daily_time: number
+  preferred_weekday: number
+  preferred_monthly_day: number
 }
 
-const DEFAULT_SETTINGS: SummarySettings = {
+const DEFAULT_SETTINGS: NotificationPreferences = {
   daily_summary_enabled: true,
   weekly_summary_enabled: true,
   monthly_summary_enabled: true,
-  daily_send_hour: 20,
-  weekly_send_day: 6,
-  monthly_send_day: 1,
+  push_enabled: false,
+  preferred_daily_time: 20,
+  preferred_weekday: 6,
+  preferred_monthly_day: 1,
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -244,7 +246,7 @@ function PreviewModal({
 
 export default function SettingsPage() {
   const supabase = createClient()
-  const [settings, setSettings] = useState<SummarySettings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<NotificationPreferences>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -258,7 +260,7 @@ export default function SettingsPage() {
       if (!user) return
 
       const { data } = await supabase
-        .from('user_summary_settings')
+        .from('notification_preferences')
         .select('*')
         .eq('user_id', user.id)
         .single()
@@ -268,9 +270,10 @@ export default function SettingsPage() {
           daily_summary_enabled: data.daily_summary_enabled ?? true,
           weekly_summary_enabled: data.weekly_summary_enabled ?? true,
           monthly_summary_enabled: data.monthly_summary_enabled ?? true,
-          daily_send_hour: data.daily_send_hour ?? 20,
-          weekly_send_day: data.weekly_send_day ?? 6,
-          monthly_send_day: data.monthly_send_day ?? 1,
+          push_enabled: data.push_enabled ?? false,
+          preferred_daily_time: data.preferred_daily_time ?? 20,
+          preferred_weekday: data.preferred_weekday ?? 6,
+          preferred_monthly_day: data.preferred_monthly_day ?? 1,
         })
       }
       setLoading(false)
@@ -278,6 +281,52 @@ export default function SettingsPage() {
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handlePushToggle = async (enabled: boolean) => {
+    if (enabled) {
+      const perm = await Notification.requestPermission()
+      if (perm === 'granted') {
+        try {
+          const reg = await navigator.serviceWorker.ready
+          if (!reg.pushManager) throw new Error('Push manager não disponível')
+
+          const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+          })
+
+          await fetch('/api/notifications/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription: sub }),
+          })
+          
+          setSettings(s => ({ ...s, push_enabled: true }))
+        } catch (err) {
+          console.error(err)
+          alert('Não foi possível ativar as notificações push neste dispositivo.')
+        }
+      } else {
+        alert('Permissão de notificação negada no navegador.')
+      }
+    } else {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          await fetch('/api/notifications/subscribe', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: sub.endpoint }),
+          })
+          await sub.unsubscribe()
+        }
+        setSettings(s => ({ ...s, push_enabled: false }))
+      } catch (err) {
+        console.error(err)
+      }
+    }
+  }
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -287,7 +336,7 @@ export default function SettingsPage() {
       if (!user) throw new Error('Não autenticado')
 
       const { error: upsertError } = await supabase
-        .from('user_summary_settings')
+        .from('notification_preferences')
         .upsert(
           { user_id: user.id, ...settings, updated_at: new Date().toISOString() },
           { onConflict: 'user_id' },
@@ -334,19 +383,50 @@ export default function SettingsPage() {
       {/* Page header */}
       <div className="page-header" style={{ marginBottom: '2rem' }}>
         <div>
-          <h1 className="page-title">Resumos Financeiros</h1>
-          <p className="page-subtitle">Configure os resumos automáticos que aparecem ao abrir o aplicativo.</p>
+          <h1 className="page-title">Central de Notificações</h1>
+          <p className="page-subtitle">Configure os alertas, resumos e preferências de comunicação.</p>
         </div>
       </div>
 
       <div style={{ display: 'grid', gap: '1.25rem', maxWidth: 720 }}>
 
+        {/* PWA Push Notification Card */}
+        <div className="card" style={{ padding: '1.5rem', border: '1px solid var(--accent)', background: 'linear-gradient(to right, var(--bg-card), rgba(16,185,129,0.03))' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div style={{
+                width: 40, height: 40,
+                background: 'var(--accent)',
+                borderRadius: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#000',
+                flexShrink: 0,
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+                </svg>
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Notificações Push no Aparelho</h2>
+                <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                  Receba alertas importantes e limites excedidos diretamente na tela do seu celular ou PC.
+                </p>
+              </div>
+            </div>
+            <Toggle
+              id="push-enabled-toggle"
+              checked={settings.push_enabled}
+              onChange={handlePushToggle}
+            />
+          </div>
+        </div>
+
         {/* Info banner */}
         <div
           style={{
             padding: '1rem 1.25rem',
-            background: 'rgba(16,185,129,0.06)',
-            border: '1px solid rgba(16,185,129,0.2)',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--glass-border)',
             borderRadius: 14,
             display: 'flex',
             alignItems: 'flex-start',
@@ -356,9 +436,8 @@ export default function SettingsPage() {
           <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>💡</span>
           <div>
             <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              Os resumos são gerados automaticamente e exibidos como notificações ao abrir o app.
-              O <strong>resumo diário</strong> aparece à noite, o <strong>semanal</strong> no fim de semana
-              e o <strong>mensal</strong> no início de cada mês.
+              Os resumos financeiros são exibidos dentro do aplicativo. Se a Notificação Push estiver ativa,
+              você também receberá um aviso assim que o resumo estiver pronto.
             </p>
           </div>
         </div>
@@ -399,8 +478,8 @@ export default function SettingsPage() {
                 <label className="form-label" htmlFor="daily-hour-select">Horário de geração</label>
                 <Select
                   id="daily-hour-select"
-                  value={settings.daily_send_hour}
-                  onChange={v => setSettings(s => ({ ...s, daily_send_hour: v }))}
+                  value={settings.preferred_daily_time}
+                  onChange={v => setSettings(s => ({ ...s, preferred_daily_time: v }))}
                   options={hourOptions}
                 />
               </div>
@@ -455,8 +534,8 @@ export default function SettingsPage() {
                 <label className="form-label" htmlFor="weekly-day-select">Dia de geração</label>
                 <Select
                   id="weekly-day-select"
-                  value={settings.weekly_send_day}
-                  onChange={v => setSettings(s => ({ ...s, weekly_send_day: v }))}
+                  value={settings.preferred_weekday}
+                  onChange={v => setSettings(s => ({ ...s, preferred_weekday: v }))}
                   options={weekDayOptions}
                 />
               </div>
@@ -511,8 +590,8 @@ export default function SettingsPage() {
                 <label className="form-label" htmlFor="monthly-day-select">Quando gerar</label>
                 <Select
                   id="monthly-day-select"
-                  value={settings.monthly_send_day}
-                  onChange={v => setSettings(s => ({ ...s, monthly_send_day: v }))}
+                  value={settings.preferred_monthly_day}
+                  onChange={v => setSettings(s => ({ ...s, preferred_monthly_day: v }))}
                   options={monthDayOptions}
                 />
               </div>

@@ -1,98 +1,88 @@
-/**
- * POST /api/summaries/send-monthly
- *
- * Triggered by Vercel cron on the 1st of every month at 08:00 UTC.
- * Protected by CRON_SECRET header.
- *
- * For each user with monthly_summary_enabled = true:
- *   1. Computes metrics for the previous full month
- *   2. Generates insights
- *   3. Builds structured payload
- *   4. Saves to `user_summaries` table (in-app notification, 7-day validity)
- */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { computeMonthlyMetrics } from '@/lib/metrics-engine'
 import { generateMonthlyInsights } from '@/lib/insight-engine'
 import { buildMonthlySummaryPayload } from '@/lib/notification-engine'
 
+export const dynamic = 'force-dynamic'
+
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
-  const authHeader = req.headers.get('authorization')
-  return authHeader === `Bearer ${secret}`
+  return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
-function getLastMonthRange(): { monthStart: Date; monthEnd: Date } {
-  const today = new Date()
-  // Last day of previous month
-  const monthEnd = new Date(today.getFullYear(), today.getMonth(), 0)
-  // First day of previous month
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
+
+function getLastMonthRange() {
+  const today     = new Date()
+  const monthEnd  = new Date(today.getFullYear(), today.getMonth(), 0)
   const monthStart = new Date(monthEnd.getFullYear(), monthEnd.getMonth(), 1)
   return { monthStart, monthEnd }
 }
 
-export async function POST(req: NextRequest) {
-  return handler(req)
-}
-
-// Vercel cron jobs use GET
-export async function GET(req: NextRequest) {
-  return handler(req)
-}
+export async function POST(req: NextRequest) { return handler(req) }
+export async function GET(req: NextRequest)  { return handler(req) }
 
 async function handler(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!isAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const supabase = await createClient()
+  const startTime = Date.now()
+  const supabase  = getServiceClient()
 
   const { data: settings, error } = await supabase
-    .from('user_summary_settings')
+    .from('notification_preferences')
     .select('user_id')
     .eq('monthly_summary_enabled', true)
 
   if (error) {
+    await logHealth(supabase, 'send-monthly', 'error', Date.now() - startTime, 0, error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   const now = new Date()
   const { monthStart, monthEnd } = getLastMonthRange()
-  // Monthly summaries are valid for 7 days
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-  const results = []
+  const results   = []
 
   for (const s of settings ?? []) {
     try {
-      const metrics = await computeMonthlyMetrics(s.user_id, monthStart, monthEnd)
+      const metrics  = await computeMonthlyMetrics(s.user_id, monthStart, monthEnd)
       const insights = generateMonthlyInsights(metrics)
-      const content = buildMonthlySummaryPayload(metrics, insights)
+      const content  = buildMonthlySummaryPayload(metrics, insights)
 
       const { error: upsertError } = await supabase
         .from('user_summaries')
         .upsert(
-          {
-            user_id: s.user_id,
-            type: 'monthly',
-            period_label: content.periodLabel,
-            content,
-            generated_at: now.toISOString(),
-            dismissed_at: null,
-            expires_at: expiresAt.toISOString(),
-          },
-          { onConflict: 'user_id,type', ignoreDuplicates: false },
+          { user_id: s.user_id, type: 'monthly', period_label: content.periodLabel, content, generated_at: now.toISOString(), dismissed_at: null, expires_at: expiresAt.toISOString() },
+          { onConflict: 'user_id,type', ignoreDuplicates: false }
         )
 
       if (upsertError) throw upsertError
 
+      await supabase.from('notifications').insert({
+        user_id: s.user_id, type: 'monthly_ready',
+        title: '🏆 Fechamento mensal disponível',
+        message: `Seu relatório de ${content.periodLabel} está pronto.`,
+        payload: { summaryType: 'monthly' }, priority: 'push', read: false,
+      })
+
       results.push({ userId: s.user_id, success: true })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      results.push({ userId: s.user_id, success: false, error: msg })
+      results.push({ userId: s.user_id, success: false, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
+  await logHealth(supabase, 'send-monthly', 'ok', Date.now() - startTime, results.length)
   return NextResponse.json({ generated: results.length, results })
+}
+
+async function logHealth(supabase: ReturnType<typeof getServiceClient>, jobName: string, status: 'ok'|'error', durationMs: number, recordsProcessed: number, errorMessage?: string) {
+  await supabase.from('system_health_logs').insert({ job_name: jobName, status, duration_ms: durationMs, records_processed: recordsProcessed, error_message: errorMessage ?? null })
 }

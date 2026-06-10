@@ -1,31 +1,27 @@
-/**
- * POST /api/summaries/send-weekly
- *
- * Triggered by Vercel cron every Saturday at 09:00 UTC (06:00 BRT).
- * Protected by CRON_SECRET header.
- *
- * For each user with weekly_summary_enabled = true:
- *   1. Computes weekly metrics (Mon–Sun of the past week)
- *   2. Generates insights
- *   3. Builds structured payload
- *   4. Saves to `user_summaries` table (in-app notification, 72h validity)
- */
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 import { computeWeeklyMetrics } from '@/lib/metrics-engine'
 import { generateWeeklyInsights } from '@/lib/insight-engine'
 import { buildWeeklySummaryPayload } from '@/lib/notification-engine'
 
+export const dynamic = 'force-dynamic'
+
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
-  const authHeader = req.headers.get('authorization')
-  return authHeader === `Bearer ${secret}`
+  return req.headers.get('authorization') === `Bearer ${secret}`
 }
 
-function getCurrentWeekRange(): { weekStart: Date; weekEnd: Date } {
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
+
+function getCurrentWeekRange() {
   const today = new Date()
-  // Saturday cron: week ended yesterday (Friday)
   const weekEnd = new Date(today)
   weekEnd.setDate(today.getDate() - 1)
   const weekStart = new Date(weekEnd)
@@ -33,67 +29,62 @@ function getCurrentWeekRange(): { weekStart: Date; weekEnd: Date } {
   return { weekStart, weekEnd }
 }
 
-export async function POST(req: NextRequest) {
-  return handler(req)
-}
-
-// Vercel cron jobs use GET
-export async function GET(req: NextRequest) {
-  return handler(req)
-}
+export async function POST(req: NextRequest) { return handler(req) }
+export async function GET(req: NextRequest)  { return handler(req) }
 
 async function handler(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!isAuthorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const supabase = await createClient()
+  const startTime = Date.now()
+  const supabase  = getServiceClient()
 
   const { data: settings, error } = await supabase
-    .from('user_summary_settings')
+    .from('notification_preferences')
     .select('user_id')
     .eq('weekly_summary_enabled', true)
 
   if (error) {
+    await logHealth(supabase, 'send-weekly', 'error', Date.now() - startTime, 0, error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   const now = new Date()
   const { weekStart, weekEnd } = getCurrentWeekRange()
-  // Weekly summaries are valid for 72 hours (through the weekend + Monday)
   const expiresAt = new Date(now.getTime() + 72 * 60 * 60 * 1000)
-
-  const results = []
+  const results   = []
 
   for (const s of settings ?? []) {
     try {
-      const metrics = await computeWeeklyMetrics(s.user_id, weekStart, weekEnd)
+      const metrics  = await computeWeeklyMetrics(s.user_id, weekStart, weekEnd)
       const insights = generateWeeklyInsights(metrics)
-      const content = buildWeeklySummaryPayload(metrics, insights)
+      const content  = buildWeeklySummaryPayload(metrics, insights)
 
       const { error: upsertError } = await supabase
         .from('user_summaries')
         .upsert(
-          {
-            user_id: s.user_id,
-            type: 'weekly',
-            period_label: content.periodLabel,
-            content,
-            generated_at: now.toISOString(),
-            dismissed_at: null,
-            expires_at: expiresAt.toISOString(),
-          },
-          { onConflict: 'user_id,type', ignoreDuplicates: false },
+          { user_id: s.user_id, type: 'weekly', period_label: content.periodLabel, content, generated_at: now.toISOString(), dismissed_at: null, expires_at: expiresAt.toISOString() },
+          { onConflict: 'user_id,type', ignoreDuplicates: false }
         )
 
       if (upsertError) throw upsertError
 
+      await supabase.from('notifications').insert({
+        user_id: s.user_id, type: 'weekly_ready',
+        title: '📈 Resumo semanal disponível',
+        message: `Seu resumo financeiro de ${content.periodLabel} está pronto.`,
+        payload: { summaryType: 'weekly' }, priority: 'push', read: false,
+      })
+
       results.push({ userId: s.user_id, success: true })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      results.push({ userId: s.user_id, success: false, error: msg })
+      results.push({ userId: s.user_id, success: false, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
+  await logHealth(supabase, 'send-weekly', 'ok', Date.now() - startTime, results.length)
   return NextResponse.json({ generated: results.length, results })
+}
+
+async function logHealth(supabase: ReturnType<typeof getServiceClient>, jobName: string, status: 'ok'|'error', durationMs: number, recordsProcessed: number, errorMessage?: string) {
+  await supabase.from('system_health_logs').insert({ job_name: jobName, status, duration_ms: durationMs, records_processed: recordsProcessed, error_message: errorMessage ?? null })
 }

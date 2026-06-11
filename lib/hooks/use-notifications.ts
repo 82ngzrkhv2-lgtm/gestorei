@@ -65,8 +65,18 @@ export function useNotifications(): UseNotificationsReturn {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
+      // Remove channel if already exists to prevent strict-mode double subscribe
+      const channelName = `notif:${user.id}`
+      const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`)
+      if (existingChannel) {
+        supabase.removeChannel(existingChannel)
+      }
+
+      const uniqueSuffix = Math.random().toString(36).substring(2, 9)
+      const channelTopic = `${channelName}-${uniqueSuffix}`
+
       channelRef.current = supabase
-        .channel(`notif:${user.id}`)
+        .channel(channelTopic)
         .on(
           'postgres_changes',
           {

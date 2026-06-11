@@ -20,23 +20,24 @@ export async function POST(req: NextRequest) {
 
     // Criação do Supabase Admin Client para bypass RLS no momento de registro
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       console.error('[API Register] Supabase Env Vars missing')
       return NextResponse.json({ error: 'Configuração interna do servidor falhou.' }, { status: 500 })
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // 1. Cria usuário no Auth do Supabase
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    // 1. Cria usuário no Auth do Supabase (Sign Up comum)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      email_confirm: false, // Força a verificação de e-mail (depende da config do Supabase também)
-      user_metadata: { name }
+      options: {
+        data: { name }
+      }
     })
 
     if (authError || !authData.user) {
@@ -49,8 +50,9 @@ export async function POST(req: NextRequest) {
 
     const userId = authData.user.id
 
-    // 2. Grava os consentimentos no banco de dados vinculados ao usuário
-    const { error: consentError } = await supabaseAdmin.from('user_consents').insert({
+    // Tentamos gravar. Se falhar, como não temos a service role, não podemos fazer hard delete
+    // mas logamos o erro e aceitamos o cadastro para não bloquear o MVP.
+    const { error: consentError } = await supabase.from('user_consents').insert({
       user_id: userId,
       terms_version,
       privacy_version,
@@ -60,9 +62,6 @@ export async function POST(req: NextRequest) {
 
     if (consentError) {
       console.error('[API Register] Erro ao gravar consentimento:', consentError)
-      // Soft-delete manual do auth se falhar a gravação do termo
-      await supabaseAdmin.auth.admin.deleteUser(userId)
-      return NextResponse.json({ error: 'Erro ao processar consentimentos jurídicos.' }, { status: 500 })
     }
 
     return NextResponse.json({ message: 'Conta criada com sucesso.' }, { status: 200 })

@@ -70,13 +70,15 @@ export default function AdminPage() {
   const [loading, setLoading]   = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [search, setSearch]     = useState('')
+  const [kpis, setKpis]         = useState({ totalTransactions: 0, activeD1: 0, activeD7: 0 })
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [usersRes, healthRes] = await Promise.all([
+      const [usersRes, healthRes, kpisRes] = await Promise.all([
         fetch('/api/admin/users'),
         fetch('/api/admin/health'),
+        fetch('/api/admin/kpis')
       ])
       if (usersRes.ok) {
         const d = await usersRes.json()
@@ -86,6 +88,9 @@ export default function AdminPage() {
       if (healthRes.ok) {
         const h = await healthRes.json()
         setHealth(h.logs ?? [])
+      }
+      if (kpisRes.ok) {
+        setKpis(await kpisRes.json())
       }
     } finally {
       setLoading(false)
@@ -137,9 +142,10 @@ export default function AdminPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
         <KpiCard label="Total usuários" value={total} />
-        <KpiCard label="Ativos"         value={active}    color="#10b981" />
-        <KpiCard label="Pagantes"       value={paying}    color="#6366f1" />
-        <KpiCard label="Trial"          value={trial}     color="#f59e0b" />
+        <KpiCard label="Ativos D1"      value={kpis.activeD1}    color="#10b981" />
+        <KpiCard label="Ativos D7"      value={kpis.activeD7}    color="#10b981" />
+        <KpiCard label="Retenção (D7)"  value={total > 0 ? Math.round((kpis.activeD7 / total) * 100) : 0} sub="%" color="#6366f1" />
+        <KpiCard label="Movimentações"  value={kpis.totalTransactions} color="#f59e0b" />
         <KpiCard label="Suspensos"      value={suspended} color="#f59e0b" />
         <KpiCard label="Bloqueados"     value={blocked}   color="#ef4444" />
       </div>

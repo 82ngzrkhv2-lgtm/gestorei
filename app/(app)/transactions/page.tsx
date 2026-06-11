@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatCurrency, formatDateFull } from '@/lib/utils'
 import type { Transaction, Account, Category } from '@/types/database'
 import QuickAddModal from '@/components/transactions/QuickAddModal'
+import { COPY } from '@/lib/copy'
 
 export default function TransactionsPage() {
   const supabase = createClient()
@@ -155,42 +156,26 @@ export default function TransactionsPage() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
-        {/* Filter grid: 2 cols on mobile, 4 on desktop */}
+        {/* Filter grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(min(140px, 100%), 1fr))',
           gap: '0.75rem',
         }}>
           <div>
-            <label className="input-label" htmlFor="tx-type">Tipo</label>
+            <label className="input-label" htmlFor="tx-type">Exibir</label>
             <select id="tx-type" className="input" value={filterType} onChange={e => setFilterType(e.target.value as any)}>
-              <option value="all">Todos</option>
-              <option value="income">Entradas</option>
-              <option value="expense">Saídas</option>
-              <option value="transfer">Transferências</option>
+              <option value="all">Tudo</option>
+              <option value="income">Apenas Entradas</option>
+              <option value="expense">Apenas Saídas</option>
             </select>
           </div>
           <div>
             <label className="input-label" htmlFor="tx-account">Núcleo</label>
             <select id="tx-account" className="input" value={filterAccount} onChange={e => setFilterAccount(e.target.value)}>
-              <option value="">Todas as contas</option>
+              <option value="">Todos</option>
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="input-label" htmlFor="tx-category">Categoria</label>
-            <select id="tx-category" className="input" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
-              <option value="">Todas</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="input-label" htmlFor="tx-from">De</label>
-            <input id="tx-from" className="input" type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} />
-          </div>
-          <div>
-            <label className="input-label" htmlFor="tx-to">Até</label>
-            <input id="tx-to" className="input" type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} />
           </div>
         </div>
       </div>
@@ -240,162 +225,145 @@ export default function TransactionsPage() {
             {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 8 }} />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="empty-state" style={{ padding: '4rem 2rem' }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem' }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}><path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+          <div className="empty-state" style={{ 
+            padding: '4rem 1.5rem', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            border: '1px dashed var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            background: 'transparent',
+            textAlign: 'center',
+            marginTop: '1rem'
+          }}>
+            <div style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+              </svg>
             </div>
-            <p style={{ fontSize: '1.0625rem', fontWeight: 500, color: 'var(--text-primary)' }}>Nenhuma movimentação encontrada.</p>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>Ajuste os filtros ou crie um novo registro.</p>
-            <button className="btn btn-primary" onClick={() => setQuickAdd(true)}>Adicionar movimentação</button>
+            <p style={{ fontSize: '1.0625rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+              {COPY.transactions.empty_title}
+            </p>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+              {COPY.transactions.empty_subtitle}
+            </p>
+            <button className="btn btn-secondary" onClick={() => setQuickAdd(true)}>{COPY.actions.new_transaction}</button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {filtered.map((tx, i) => {
-              const txAny = tx as any
-              const account = txAny.account
-              const category = txAny.category
-              
-              const isTransfer = tx.type === 'transfer'
-              const isTransferInflow = isTransfer && tx.account_id === tx.destination_account_id
-              const isTransferOutflow = isTransfer && tx.account_id === tx.source_account_id
-              const isIncome = tx.type === 'income' || isTransferInflow
+            {Object.entries(
+              filtered.reduce((acc, tx) => {
+                if (!acc[tx.date]) acc[tx.date] = []
+                acc[tx.date].push(tx)
+                return acc
+              }, {} as Record<string, typeof filtered>)
+            )
+            .sort(([dateA], [dateB]) => dateB.localeCompare(dateA))
+            .map(([date, dayTxs]) => (
+              <div key={date} style={{ marginBottom: '1.5rem' }}>
+                <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-secondary)', padding: '0.5rem 1rem', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  {formatDateFull(date)}
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {dayTxs.map((tx, i) => {
+                    const txAny = tx as any
+                    const account = txAny.account
+                    const category = txAny.category
+                    
+                    const isTransfer = tx.type === 'transfer'
+                    const isTransferInflow = isTransfer && tx.account_id === tx.destination_account_id
+                    const isIncome = tx.type === 'income' || isTransferInflow
 
-              // Muted gray for transfer outflow, green for inflow, red for expenses, emerald for income
-              const amountColor = isIncome 
-                ? 'var(--accent)' 
-                : isTransfer 
-                  ? 'var(--text-secondary)' 
-                  : 'var(--accent-red)'
+                    const amountColor = isIncome ? 'var(--text-primary)' : isTransfer ? 'var(--text-secondary)' : 'var(--text-primary)'
+                    const amountPrefix = isIncome ? '+' : '-'
+                    const iconBg = 'var(--bg-elevated)'
+                    const iconBorder = 'var(--border)'
+                    const iconColor = 'var(--text-primary)'
 
-              const amountPrefix = isIncome ? '+' : '-'
+                    return (
+                      <div
+                        key={tx.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 'clamp(0.75rem, 2vw, 1.25rem)',
+                          padding: 'clamp(0.875rem, 2vw, 1.125rem) clamp(0.875rem, 2.5vw, 1.5rem)',
+                          borderBottom: i < dayTxs.length - 1 ? '1px solid var(--border)' : 'none',
+                          transition: 'background 0.2s', minHeight: '64px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-elevated)'}
+                        onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
+                      >
+                        {/* Type icon */}
+                        <div style={{
+                          width: 42, height: 42, borderRadius: 12, flexShrink: 0,
+                          background: iconBg, border: `1px solid ${iconBorder}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: iconColor,
+                        }}>
+                          {isTransfer ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3L21 7L17 11"/><path d="M21 7H9"/><path d="M7 21L3 17L7 13"/><path d="M3 17H15"/></svg>
+                          ) : isIncome ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>
+                          )}
+                        </div>
 
-              const iconBg = isTransfer 
-                ? 'rgba(59, 130, 246, 0.1)' 
-                : isIncome 
-                  ? 'rgba(16, 185, 129, 0.1)' 
-                  : 'rgba(239, 68, 68, 0.1)'
+                        {/* Description + meta */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            fontWeight: 600, fontSize: 'var(--text-base)', color: 'var(--text-primary)',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3,
+                          }}>
+                            {tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', marginTop: 3 }}>
+                            {account && (
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: account.color, flexShrink: 0 }} />
+                                {account.name}
+                              </span>
+                            )}
+                            {category && (
+                              <span style={{ fontSize: 'var(--text-xs)', color: category.color, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                {category.name}
+                              </span>
+                            )}
+                            {isTransfer && (
+                              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent-blue)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                Interna
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-              const iconBorder = isTransfer 
-                ? 'rgba(59, 130, 246, 0.2)' 
-                : isIncome 
-                  ? 'rgba(16, 185, 129, 0.2)' 
-                  : 'rgba(239, 68, 68, 0.2)'
+                        {/* Amount */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 2, minWidth: 0 }}>
+                          <p className="money-value" style={{ fontWeight: 700, fontSize: 'var(--text-money-sm)', color: amountColor, whiteSpace: 'nowrap' }}>
+                            {amountPrefix}{formatCurrency(Number(tx.amount))}
+                          </p>
+                        </div>
 
-              const iconColor = isTransfer 
-                ? 'var(--accent-blue)' 
-                : isIncome 
-                  ? 'var(--accent)' 
-                  : 'var(--accent-red)'
-
-              return (
-                <div
-                  key={tx.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'clamp(0.75rem, 2vw, 1.25rem)',
-                    /* Min height = 44px tap target */
-                    padding: 'clamp(0.875rem, 2vw, 1.125rem) clamp(0.875rem, 2.5vw, 1.5rem)',
-                    borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                    transition: 'background 0.2s',
-                    minHeight: '64px',
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-elevated)'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = 'transparent'}
-                >
-                  {/* Type icon */}
-                  <div style={{
-                    width: 42, height: 42, borderRadius: 12, flexShrink: 0,
-                    background: iconBg,
-                    border: `1px solid ${iconBorder}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: iconColor,
-                  }}>
-                    {isTransfer ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 3L21 7L17 11"/><path d="M21 7H9"/><path d="M7 21L3 17L7 13"/><path d="M3 17H15"/></svg>
-                    ) : isIncome ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5m-7 7l7-7 7 7"/></svg>
-                    ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14m-7-7l7 7 7-7"/></svg>
-                    )}
-                  </div>
-
-                  {/* Description + meta */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Title — weight 600, fluid size, never wraps */}
-                    <p style={{
-                      fontWeight: 600,
-                      fontSize: 'var(--text-base)',
-                      color: 'var(--text-primary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      lineHeight: 1.3,
-                    }}>
-                      {tx.description || category?.name || (isTransfer ? 'Transferência' : isIncome ? 'Entrada' : 'Saída')}
-                    </p>
-                    {/* Meta row — smaller, secondary */}
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '0.5rem',
-                      alignItems: 'center',
-                      marginTop: 3,
-                    }}>
-                      {account && (
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: account.color, flexShrink: 0 }} />
-                          {account.name}
-                        </span>
-                      )}
-                      {category && (
-                        <span style={{ fontSize: 'var(--text-xs)', color: category.color, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          {category.name}
-                        </span>
-                      )}
-                      {isTransfer && (
-                        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent-blue)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          Interna
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Amount + date */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, gap: 2, minWidth: 0 }}>
-                    <p
-                      className="money-value"
-                      style={{
-                        fontWeight: 700,
-                        fontSize: 'var(--text-money-sm)',
-                        color: amountColor,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {amountPrefix}{formatCurrency(Number(tx.amount))}
-                    </p>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                      {formatDateFull(tx.date)}
-                    </p>
-                  </div>
-
-                  {/* Delete button */}
-                  <button
-                    onClick={() => deleteTransaction(tx)}
-                    className="btn btn-ghost btn-icon"
-                    title="Excluir movimentação"
-                    aria-label="Excluir movimentação"
-                    style={{ opacity: 0.6, flexShrink: 0 }}
-                    disabled={loading}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6l-1 14H6L5 6"/>
-                    </svg>
-                  </button>
+                        {/* Delete button */}
+                        <button
+                          onClick={() => deleteTransaction(tx)}
+                          className="btn btn-ghost btn-icon"
+                          title="Excluir movimentação"
+                          aria-label="Excluir movimentação"
+                          style={{ opacity: 0.6, flexShrink: 0 }}
+                          disabled={loading}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6l-1 14H6L5 6"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

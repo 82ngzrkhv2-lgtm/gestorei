@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Sidebar from '@/components/shared/Sidebar'
 import MobileNav from '@/components/shared/MobileNav'
-import SummaryPopupProvider from '@/components/shared/SummaryPopupProvider'
+import MobileHeader from '@/components/shared/MobileHeader'
 import ConsentGuard from '@/components/shared/ConsentGuard'
 import { PrivacyProvider } from '@/lib/contexts/PrivacyContext'
 
@@ -18,11 +18,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="app-layout">
           <Sidebar user={user} />
           <main className="main-content">
+            <MobileHeader />
             {children}
           </main>
           <MobileNav />
-          {/* In-app financial summary pop-up (client-side, non-blocking) */}
-          <SummaryPopupProvider />
+          {/* SummaryPopup removed for MVP */}
         </div>
       </PrivacyProvider>
     </ConsentGuard>

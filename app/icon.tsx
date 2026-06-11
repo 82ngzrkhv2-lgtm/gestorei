@@ -1,0 +1,71 @@
+import { ImageResponse } from 'next/og'
+
+export const size = {
+  width: 512,
+  height: 512,
+}
+
+export const contentType = 'image/png'
+
+export default function Icon() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+        }}
+      >
+        <div style={{ display: 'flex', width: '100%', height: '100%', position: 'relative' }}>
+          {/* Back Layer - Light Silver */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '14%',
+              left: '14%',
+              width: '56%',
+              height: '56%',
+              borderRadius: '14%',
+              background: '#C4C5C8',
+            }}
+          />
+          
+          {/* Middle Layer - Dark Gray */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '25%',
+              left: '25%',
+              width: '56%',
+              height: '56%',
+              borderRadius: '14%',
+              background: '#4F5257',
+              boxShadow: '-4px 4px 12px rgba(0,0,0,0.3)',
+            }}
+          />
+          
+          {/* Front Layer - Near Black */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '36%',
+              left: '36%',
+              width: '56%',
+              height: '56%',
+              borderRadius: '14%',
+              background: '#1C1C1F',
+              boxShadow: '-6px 6px 16px rgba(0,0,0,0.4)',
+            }}
+          />
+        </div>
+      </div>
+    ),
+    {
+      ...size,
+    }
+  )
+}

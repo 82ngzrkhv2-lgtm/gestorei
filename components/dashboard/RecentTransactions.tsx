@@ -1,39 +1,52 @@
 import type { Transaction } from '@/types/database'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import Link from 'next/link'
+import { COPY } from '@/lib/copy'
 
 interface Props {
   transactions: Transaction[]
   onAdd: () => void
+  hideHeader?: boolean
 }
 
-export default function RecentTransactions({ transactions, onAdd }: Props) {
+export default function RecentTransactions({ transactions, onAdd, hideHeader }: Props) {
   return (
-    <div className="glass-card" style={{ padding: '1.25rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
-      <div className="section-header" style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ width: 4, height: 16, background: 'var(--accent)', borderRadius: 4 }} />
-          <span className="section-title">Últimas Movimentações</span>
+    <div className="glass-card" style={{ padding: hideHeader ? '0' : '1.25rem 1.5rem', position: 'relative', overflow: 'hidden', background: hideHeader ? 'transparent' : 'var(--bg-card)', border: hideHeader ? 'none' : '1px solid var(--glass-border)', boxShadow: hideHeader ? 'none' : 'var(--shadow-sm)' }}>
+      {!hideHeader && (
+        <div className="section-header" style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: 4, height: 16, background: 'var(--accent)', borderRadius: 4 }} />
+            <span className="section-title">Últimas Movimentações</span>
+          </div>
+          <Link href="/transactions" style={{ fontSize: '0.8125rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+            Ver histórico completo
+          </Link>
         </div>
-        <Link href="/transactions" style={{ fontSize: '0.8125rem', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
-          Ver histórico completo
-        </Link>
-      </div>
+      )}
 
       {transactions.length === 0 ? (
-        <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: '50%', background: 'var(--bg-elevated)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem'
-          }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}>
-              <path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+        <div className="empty-state" style={{ 
+          padding: '3rem 1.5rem', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          border: '1px dashed var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'transparent',
+          textAlign: 'center'
+        }}>
+          <div style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
             </svg>
           </div>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Nenhuma movimentação registrada.</p>
-          <button onClick={onAdd} className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
-            Registrar primeira movimentação
-          </button>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 500, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+            {COPY.dashboard.empty_history}
+          </p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+            {COPY.dashboard.empty_subtitle}
+          </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -46,26 +59,12 @@ export default function RecentTransactions({ transactions, onAdd }: Props) {
             const isTransferInflow = isTransfer && tx.account_id === tx.destination_account_id
             const isIncome = tx.type === 'income' || isTransferInflow
 
-            const iconBg = isTransfer 
-              ? 'rgba(59, 130, 246, 0.1)' 
-              : isIncome 
-                ? 'rgba(16, 185, 129, 0.1)' 
-                : 'rgba(239, 68, 68, 0.1)'
-
-            const iconBorder = isTransfer 
-              ? 'rgba(59, 130, 246, 0.2)' 
-              : isIncome 
-                ? 'rgba(16, 185, 129, 0.2)' 
-                : 'rgba(239, 68, 68, 0.2)'
-
-            const iconColor = isTransfer 
-              ? 'var(--accent-blue)' 
-              : isIncome 
-                ? 'var(--accent)' 
-                : 'var(--accent-red)'
+            const iconBg = 'var(--bg-elevated)'
+            const iconBorder = 'var(--border)'
+            const iconColor = 'var(--text-primary)'
 
             const amountColor = isIncome 
-              ? 'var(--accent)' 
+              ? 'var(--text-primary)' 
               : isTransfer 
                 ? 'var(--text-secondary)' 
                 : 'var(--text-primary)'

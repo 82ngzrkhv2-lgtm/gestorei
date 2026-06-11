@@ -1,3 +1,5 @@
+import Logo from '@/components/shared/Logo'
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="auth-layout">
@@ -26,13 +28,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <div className="auth-left-content">
           <div className="auth-logo" style={{ marginBottom: '3rem' }}>
-            <div className="auth-logo-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                <path d="M2 17l10 5 10-5"/>
-                <path d="M2 12l10 5 10-5"/>
-              </svg>
-            </div>
+            <Logo size={48} />
             <span className="auth-logo-text" style={{ fontSize: '1.75rem' }}>Gestorei</span>
           </div>
 
@@ -66,13 +62,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* Mobile Header (só aparece no mobile) */}
         <div className="auth-mobile-header">
           <div className="auth-logo">
-            <div className="auth-logo-icon" style={{ width: 32, height: 32 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                <path d="M2 17l10 5 10-5"/>
-                <path d="M2 12l10 5 10-5"/>
-              </svg>
-            </div>
+            <Logo size={32} />
             <span className="auth-logo-text">Gestorei</span>
           </div>
         </div>

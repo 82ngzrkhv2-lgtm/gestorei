@@ -7,6 +7,7 @@ import type { User } from '@supabase/supabase-js'
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { usePrivacy } from '@/lib/contexts/PrivacyContext'
+import Logo from '@/components/shared/Logo'
 
 const NotificationBell = dynamic(() => import('@/components/notifications/NotificationBell'), { ssr: false })
 
@@ -87,11 +88,9 @@ export default function Sidebar({ user }: { user: User }) {
   return (
     <aside className="sidebar">
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '2.5rem', padding: '0 0.25rem' }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#000', flexShrink: 0 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-        </div>
-        <span style={{ fontWeight: 700, fontSize: '1.0625rem', letterSpacing: '-0.02em' }}>Gestorei</span>
+      <div style={{ padding: '0 0.5rem', marginBottom: '2.5rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        <Logo size={32} />
+        <span style={{ fontWeight: 700, fontSize: '1.125rem', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Gestorei</span>
 
         {/* Right side controls */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
